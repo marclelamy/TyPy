@@ -9,9 +9,8 @@ from PyDictionary import PyDictionary
 
 pygame.init()
 con = sqlite3.connect("database.db")
-
 game_id = np.random.randint(10**10)
-sentence_length = 1#np.random.randint(40, 60)
+sentence_length = 25#np.random.randint(25, 40)
 max_word_length = None
 me_playing = 1
 
@@ -123,7 +122,6 @@ def main():
                     # print(guess, char, sentence[-1], index, len(game_settings[0]), guess == char, guess == 'return' and index == len(game_settings[0]))
                     
                     if index == len(game_settings[0]): # For last character only
-                        print('LAST KEY\n'*10)
                         if guess == 'return': # If last key pressed is enter, log the game otherwise not
                             log_game = True
                         else:
