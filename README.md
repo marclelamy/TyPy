@@ -1,0 +1,1 @@
+Game to make you type faster. By logging time at which is key is pressed, the game will adapt the proposed words to make you progress faster.
