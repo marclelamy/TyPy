@@ -1,16 +1,19 @@
-# for random functions
-from random import random
 import numpy as np
 import pygame
 import sqlite3
 import pandas as pd
 import time
-from PyDictionary import PyDictionary
+# from PyDictionary import PyDictionary
+import os
 
 pygame.init()
 con = sqlite3.connect("database.db")
+current_dir = os.getcwd()
+
+
+# Game settings
 game_id = np.random.randint(10**10)
-sentence_length = 25#np.random.randint(25, 40)
+sentence_length = 40 #np.random.randint(25, 40)
 max_word_length = None
 me_playing = 1
 
@@ -18,7 +21,8 @@ me_playing = 1
 
 
 
-def load_text (file_path='/Users/marclamy/Desktop/code/typing/data/common_words.txt') -> list:
+def load_text (file_path=f'{current_dir}/data/common_words.txt') -> list:
+    '''a '''
     with open(file_path) as file: 
         all_words = file.read().split('\n')
 
@@ -44,12 +48,12 @@ def pick_words(word_list, max_word_length, sentence_length=10):
 
 
 
-dictionary=PyDictionary()
-def get_definition (word):
+# dictionary=PyDictionary()
+# def get_definition (word):
     # word_meaning = get_definition(word[0])
     # sentence = word + ' - ' + word_meaning[list(word_meaning.keys())[0]][0]
     # sentence = ''.join([char.lower() for char in sentence if char.isalpha() or char in (' ', '-')])
-    return dictionary.meaning(word)
+    # return dictionary.meaning(word)
     
 
 
@@ -58,7 +62,7 @@ def get_definition (word):
 
 def log_key_pressed(key_pressed):
     if me_playing == 1:
-        column_names = ['key', 'correct', 'time', 'game_id']
+        column_names = ['key', 'correct_key', 'time', 'game_id']
         df_keys = pd.DataFrame(key_pressed, columns=column_names)
         df_keys.to_sql('keys_typed', con, if_exists='append', index=False)
 
@@ -75,13 +79,13 @@ def score_game(key_pressed=None, game_id=None):
     if key_pressed == None:
         df = pd.read_sql_query(f'select * from keys_typed where game_id = {game_id}', con)
     else:
-        column_names = ['key', 'correct', 'time', 'game_id']
+        column_names = ['key', 'correct_key', 'time', 'game_id']
         df = pd.DataFrame(key_pressed, columns=column_names)
 
     first_second, last_second = df.iloc[[0, -1], 2]
     game_duration = last_second - first_second
     char_typed = df.shape[0]
-    char_to_type = df.query('correct == 1').shape[0]
+    char_to_type = df.query('correct_key == 1').shape[0]
     typing_accuracy = char_to_type / char_typed
     wpm = char_to_type / (game_duration / 60) / 4.7
 
@@ -121,7 +125,7 @@ def main():
                     guess = pygame.key.name(event.key)
                     # print(guess, char, sentence[-1], index, len(game_settings[0]), guess == char, guess == 'return' and index == len(game_settings[0]))
                     
-                    if index == len(game_settings[0]): # For last character only
+                    if index == len(game_settings[0]): # For last character of sentence only
                         if guess == 'return': # If last key pressed is enter, log the game otherwise not
                             log_game = True
                         else:
@@ -131,14 +135,15 @@ def main():
                     
                     
                     else:
-                        if guess == char:
-                            key_pressed.append([str(guess), True, time.time(), game_id])
+                        if guess == char: 
+                            correct_key = True
                             sentence = sentence[1:]
                             break
-                    
                         else:
-                            key_pressed.append([str(guess), False, time.time(), game_id])
+                            correct_key = False
                             print(guess, words_to_display)
+
+                        key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
 
 
     if log_game == True:
@@ -148,3 +153,4 @@ def main():
     score_game(key_pressed)
 
 main()
+
