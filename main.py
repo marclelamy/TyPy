@@ -11,7 +11,7 @@ pygame.init()
 con = sqlite3.connect("database.db")
 
 game_id = np.random.randint(10**10)
-sentence_length = 3#np.random.randint(40, 60)
+sentence_length = 1#np.random.randint(40, 60)
 max_word_length = None
 me_playing = 1
 
@@ -47,6 +47,9 @@ def pick_words(word_list, max_word_length, sentence_length=10):
 
 dictionary=PyDictionary()
 def get_definition (word):
+    # word_meaning = get_definition(word[0])
+    # sentence = word + ' - ' + word_meaning[list(word_meaning.keys())[0]][0]
+    # sentence = ''.join([char.lower() for char in sentence if char.isalpha() or char in (' ', '-')])
     return dictionary.meaning(word)
     
 
@@ -57,27 +60,33 @@ def get_definition (word):
 def log_key_pressed(key_pressed):
     if me_playing == 1:
         column_names = ['key', 'correct', 'time', 'game_id']
-        pd.DataFrame(key_pressed, columns=column_names).to_sql('keys_typed', con, if_exists='append', index=False)
+        df_keys = pd.DataFrame(key_pressed, columns=column_names)
+        df_keys.to_sql('keys_typed', con, if_exists='append', index=False)
 
 def log_game_settings(game_settings):
     if me_playing == 1:
         column_names = ['sentence', 'sentence_length', 'max_word_length', 'game_id']
-        pd.DataFrame([game_settings], columns=column_names).to_sql('games_settings', con, if_exists='append', index=False)
+        df_game_settings = pd.DataFrame([game_settings], columns=column_names)
+        df_game_settings.to_sql('games_settings', con, if_exists='append', index=False)
 
 
 
 
-def score_game(game_id):
-    df = pd.read_sql_query('select * from keys_typed', con)
+def score_game(key_pressed=None, game_id=None):
+    if key_pressed == None:
+        df = pd.read_sql_query(f'select * from keys_typed where game_id = {game_id}', con)
+    else:
+        column_names = ['key', 'correct', 'time', 'game_id']
+        df = pd.DataFrame(key_pressed, columns=column_names)
 
-    first_second, last_second = df.query('game_id == @game_id').iloc[[0, -1], 2]
+    first_second, last_second = df.iloc[[0, -1], 2]
     game_duration = last_second - first_second
-    char_typed = df.query('game_id == @game_id').shape[0]
-    char_to_type = df.query('game_id == @game_id and correct == 1').shape[0]
+    char_typed = df.shape[0]
+    char_to_type = df.query('correct == 1').shape[0]
     typing_accuracy = char_to_type / char_typed
     wpm = char_to_type / (game_duration / 60) / 4.7
 
-    print(f'Char to type: {char_to_type} | Char typed: {char_typed} | Game duration: {int(game_duration)} | Typing Accuracy: {typing_accuracy:.1%} | WPM: {round(wpm)}')
+    print(f'Char to type: {char_to_type} | Char typed: {char_typed} | Game duration: {int(game_duration)}s | Typing Accuracy: {typing_accuracy:.1%} | WPM: {round(wpm)}')
 
 
 
@@ -87,43 +96,57 @@ def main():
     text = load_text()
     sentence = pick_words(text, max_word_length, sentence_length)
 
-    game_settings = []
+    game_settings = [sentence, sentence_length, max_word_length, game_id]
+    print(game_settings)
 
-
-    # word_meaning = get_definition(word[0])
-    # sentence = word + ' - ' + word_meaning[list(word_meaning.keys())[0]][0]
-    # sentence = ''.join([char.lower() for char in sentence if char.isalpha() or char in (' ', '-')])
     
     # Looping through each character to compare them to the last key pressed
     key_pressed = []
-    for char in sentence:
+    sentence = sentence + ' ' # Adding one character at the end to validate the game (type enter)
+    for index, char in enumerate(sentence):
+        # Replacing space by spelled word space to match it to the key
         if char == ' ':
             char = 'space'
-
+        
+        # Printing au updated sentence
         print('\n'*20)
-        first_two_words = ' '.join(sentence.split(' ')[:3])
-        print(' ', first_two_words, '\t'*10, end='\r')
+        words_to_display_count = 3
+        words_to_display = ' '.join(sentence.split(' ')[:words_to_display_count])
+        print(' ', words_to_display, '\t'*5, end='\r')
 
+        # Looping through event key until the right key is pressed
         guess = '' 
         while guess != char:
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN:
                     guess = pygame.key.name(event.key)
-
-                    if guess == char:
-                        key_pressed.append([str(guess), True, time.time(), game_id])
-                        sentence = sentence[1:]
+                    # print(guess, char, sentence[-1], index, len(game_settings[0]), guess == char, guess == 'return' and index == len(game_settings[0]))
+                    
+                    if index == len(game_settings[0]): # For last character only
+                        print('LAST KEY\n'*10)
+                        if guess == 'return': # If last key pressed is enter, log the game otherwise not
+                            log_game = True
+                        else:
+                            log_game = False
+                        guess = char
                         break
                     
+                    
                     else:
-                        key_pressed.append([str(guess), False, time.time(), game_id])
-                        print(guess)
+                        if guess == char:
+                            key_pressed.append([str(guess), True, time.time(), game_id])
+                            sentence = sentence[1:]
+                            break
+                    
+                        else:
+                            key_pressed.append([str(guess), False, time.time(), game_id])
+                            print(guess, words_to_display)
 
 
-    game_settings = [sentence, sentence_length, max_word_length, game_id]
-    log_key_pressed(key_pressed)
-    log_game_settings(game_settings)
+    if log_game == True:
+        log_key_pressed(key_pressed)
+        log_game_settings(game_settings)
 
-    score_game(game_id)
+    score_game(key_pressed)
 
 main()
