@@ -11,7 +11,7 @@ pygame.init()
 con = sqlite3.connect("database.db")
 
 game_id = np.random.randint(10**10)
-sentence_length = 10#np.random.randint(40, 60)
+sentence_length = 3#np.random.randint(40, 60)
 max_word_length = None
 me_playing = 1
 
@@ -54,13 +54,15 @@ def get_definition (word):
 
 
 
-def log_key_pressed(key, correct):
+def log_key_pressed(key_pressed):
     if me_playing == 1:
-        pd.DataFrame({'key': [str(key)], 'correct': [correct], 'time': [time.time()], 'game_id': [game_id]}).to_sql('keys_typed', con, if_exists='append', index=False)
+        column_names = ['key', 'correct', 'time', 'game_id']
+        pd.DataFrame(key_pressed, columns=column_names).to_sql('keys_typed', con, if_exists='append', index=False)
 
-def log_game_settings(sentence):
+def log_game_settings(game_settings):
     if me_playing == 1:
-        pd.DataFrame({'sentence': [sentence], 'sentence_length': [sentence_length], 'max_word_length': [max_word_length], 'game_id': [game_id]}).to_sql('games_settings', con, if_exists='append', index=False)
+        column_names = ['sentence', 'sentence_length', 'max_word_length', 'game_id']
+        pd.DataFrame([game_settings], columns=column_names).to_sql('games_settings', con, if_exists='append', index=False)
 
 
 
@@ -84,13 +86,16 @@ def main():
     # Generating text to be typed
     text = load_text()
     sentence = pick_words(text, max_word_length, sentence_length)
-    log_game_settings(sentence)
+
+    game_settings = []
+
 
     # word_meaning = get_definition(word[0])
     # sentence = word + ' - ' + word_meaning[list(word_meaning.keys())[0]][0]
     # sentence = ''.join([char.lower() for char in sentence if char.isalpha() or char in (' ', '-')])
     
     # Looping through each character to compare them to the last key pressed
+    key_pressed = []
     for char in sentence:
         if char == ' ':
             char = 'space'
@@ -106,14 +111,18 @@ def main():
                     guess = pygame.key.name(event.key)
 
                     if guess == char:
-                        log_key_pressed(guess, True) 
+                        key_pressed.append([str(guess), True, time.time(), game_id])
                         sentence = sentence[1:]
                         break
                     
                     else:
-                        log_key_pressed(guess, False) 
+                        key_pressed.append([str(guess), False, time.time(), game_id])
                         print(guess)
 
+
+    game_settings = [sentence, sentence_length, max_word_length, game_id]
+    log_key_pressed(key_pressed)
+    log_game_settings(game_settings)
 
     score_game(game_id)
 
