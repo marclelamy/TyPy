@@ -13,7 +13,7 @@ current_dir = os.getcwd()
 
 # Game settings
 game_id = np.random.randint(10**10)
-sentence_length = 20 #np.random.randint(25, 40)
+sentence_length = np.random.randint(25, 40)
 max_word_length = None
 me_playing = 1
 
@@ -54,10 +54,6 @@ def pick_words(word_list, max_word_length, sentence_length=10):
     # sentence = word + ' - ' + word_meaning[list(word_meaning.keys())[0]][0]
     # sentence = ''.join([char.lower() for char in sentence if char.isalpha() or char in (' ', '-')])
     # return dictionary.meaning(word)
-    
-
-
-
 
 
 def log_key_pressed(key_pressed):
@@ -65,6 +61,8 @@ def log_key_pressed(key_pressed):
         column_names = ['key', 'correct_key', 'time', 'game_id']
         df_keys = pd.DataFrame(key_pressed, columns=column_names)
         df_keys.to_sql('keys_pressed', con, if_exists='append', index=False)
+
+
 
 def log_game_settings(game_settings):
     if me_playing == 1:
@@ -74,6 +72,38 @@ def log_game_settings(game_settings):
 
 
 
+def whats_highscore ():
+    query = """
+    with tbl1 as (
+    select
+        game_id
+        , max(time) - min(time) game_duration
+        , sum(case when correct_key = 1 then 1 else 0 end) keys_to_press
+        , count(*) keys_pressed
+        , round(CAST(sum(case when correct_key = 1 then 1 else 0 end) as REAL) / count(*), 3) * 100 accuracy
+        , round(sum(case when correct_key = 1 then 1 else 0 end) / ((max(time) - min(time)) / 60) / 4.7) wpm
+
+    from keys_pressed
+    where 1=1
+        --and game_id = 3513153090
+    group by 1
+    having
+        count(*) >= 20
+    )
+
+    select * from tbl1
+    where wpm = (select max(wpm) from tbl1)
+    """
+
+    df_high_score = pd.read_sql_query(query, con)
+    game_duration = df_high_score.loc[0, 'game_duration']
+    keys_to_press = df_high_score.loc[0, 'keys_to_press']
+    keys_pressed = df_high_score.loc[0, 'keys_pressed']
+    accuracy = df_high_score.loc[0, 'accuracy']
+    wpm = df_high_score.loc[0, 'wpm']
+    print(f'\nRECORD\nChar to type: {keys_to_press} | Char typed: {keys_pressed} | Game duration: {int(game_duration)}s | Typing Accuracy: {accuracy:.1%} | WPM: {round(wpm)}')
+
+
 
 def score_game(key_pressed=None, game_id=None):
     if key_pressed == None:
@@ -81,7 +111,6 @@ def score_game(key_pressed=None, game_id=None):
     else:
         column_names = ['key', 'correct_key', 'time', 'game_id']
         df = pd.DataFrame(key_pressed, columns=column_names)
-        print(df)
 
     first_second, last_second = df.iloc[[0, -1], 2]
     game_duration = last_second - first_second
@@ -91,7 +120,7 @@ def score_game(key_pressed=None, game_id=None):
     wpm = char_to_type / (game_duration / 60) / 4.7
 
     print(f'Char to type: {char_to_type} | Char typed: {char_typed} | Game duration: {int(game_duration)}s | Typing Accuracy: {typing_accuracy:.1%} | WPM: {round(wpm)}')
-
+    whats_highscore ()
 
 
 
@@ -113,10 +142,13 @@ def main():
             char = 'space'
         
         # Printing au updated sentence
-        print('\n'*20)
-        words_to_display_count = 3
-        words_to_display = ' '.join(sentence.split(' ')[:words_to_display_count])
-        print(' ', words_to_display, '\t'*5, end='\r')
+        if index == len(game_settings[0]): 
+            print('No more letters, press ENTER to save the game, any other to not.')
+        else:     
+            print('\n'*20)
+            words_to_display_count = 3
+            words_to_display = ' '.join(sentence.split(' ')[:words_to_display_count])
+            print(' ', words_to_display, '\t'*5, end='\r')
 
         # Looping through event key until the right key is pressed
         guess = '' 
@@ -153,5 +185,13 @@ def main():
 
     score_game(key_pressed)
 
-main()
 
+
+
+
+
+
+
+
+
+main()
