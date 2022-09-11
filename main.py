@@ -13,7 +13,7 @@ current_dir = os.getcwd()
 
 # Game settings
 game_id = np.random.randint(10**10)
-sentence_length = 40 #np.random.randint(25, 40)
+sentence_length = 20 #np.random.randint(25, 40)
 max_word_length = None
 me_playing = 1
 
@@ -64,7 +64,7 @@ def log_key_pressed(key_pressed):
     if me_playing == 1:
         column_names = ['key', 'correct_key', 'time', 'game_id']
         df_keys = pd.DataFrame(key_pressed, columns=column_names)
-        df_keys.to_sql('keys_typed', con, if_exists='append', index=False)
+        df_keys.to_sql('keys_pressed', con, if_exists='append', index=False)
 
 def log_game_settings(game_settings):
     if me_playing == 1:
@@ -81,6 +81,7 @@ def score_game(key_pressed=None, game_id=None):
     else:
         column_names = ['key', 'correct_key', 'time', 'game_id']
         df = pd.DataFrame(key_pressed, columns=column_names)
+        print(df)
 
     first_second, last_second = df.iloc[[0, -1], 2]
     game_duration = last_second - first_second
@@ -137,17 +138,17 @@ def main():
                     else:
                         if guess == char: 
                             correct_key = True
+                            key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
                             sentence = sentence[1:]
                             break
                         else:
                             correct_key = False
                             print(guess, words_to_display)
-
-                        key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
+                            key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
 
 
     if log_game == True:
-        log_key_pressed(key_pressed)
+        log_key_pressed(key_pressed=key_pressed)
         log_game_settings(game_settings)
 
     score_game(key_pressed)
