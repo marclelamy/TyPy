@@ -15,8 +15,11 @@ current_dir = os.getcwd()
 game_id = np.random.randint(10**10)
 sentence_length = np.random.randint(25, 40)
 max_word_length = None
+capitalized_words_count = 1 # Set a float between 0 and 1 for the percentage of word that will be generated with a/multiple random case letter
+capitalized_letters_count = .1 # Set a float between 0 and 1 for the percentage of the letters of the word that will be capitalized. Set an integer for the nmumber or random case statement letters. 1 is all letters capitalized not 1 word. if 'first' then only first letter will be 
+force_shift = True # Force to type the right shift of the keyboard
+words_to_display_count = 10
 me_playing = 1
-
 
 
 
@@ -27,6 +30,36 @@ def load_text (file_path=f'{current_dir}/data/common_words.txt') -> list:
         all_words = file.read().split('\n')
 
     return all_words
+
+
+
+def capitalize_random(sentence):
+    capitalized_words_count = 1 # Set a float between 0 and 1 for the percentage of word that will be generated with a/multiple random case letter
+    capitalized_letters_perc = '0.8'
+    capitalized_words_count = round(len(sentence) * capitalized_words_count)
+
+    for index_word in range(capitalized_words_count):
+        word = sentence[index_word]
+
+        if type(capitalized_letters_perc) in [int, float]:
+            if capitalized_letters_perc <= 1:
+                capitalized_letters_count = round(len(word) * capitalized_letters_perc)
+
+            rdm_list = list(range(len(word)))
+            np.random.shuffle(rdm_list)
+            rdm_list = rdm_list[:capitalized_letters_count]
+            sentence[index_word] = ''.join([char.upper() if index_char in rdm_list else char for index_char, char in enumerate(word)])
+
+        elif type(capitalized_letters_perc) == str:
+            sentence[index_word] = word.title()
+
+        
+
+    np.random.shuffle(sentence)
+
+    return sentence
+
+
 
 
 def pick_words(word_list, max_word_length, sentence_length=10):
@@ -43,7 +76,10 @@ def pick_words(word_list, max_word_length, sentence_length=10):
             random_word.append(picked_word)
 
 
-    return ' '.join(random_word)
+    sentence = random_word
+    # sentence = capitalize_random(sentence)
+
+    return ' '.join(sentence)
 
 
 
@@ -72,6 +108,33 @@ def log_game_settings(game_settings):
 
 
 
+def next_key_pressed():
+    key_map_shift = {'`': '~', '1': '!', '2': '@', '3': '#', '4': '$', '5': '%', '6': '^', '7': '&', '8': '*', '9': '(', '0': ')', '-': '_', '=': '+', 'q': 'Q', 'w': 'W', 'e': 'E', 'r': 'R', 't': 'T', 'y': 'Y', 'u': 'U', 'i': 'I', 'o': 'O', 'p': 'P', '[': '{', ']': '}', "''": '|', 'a': 'A', 's': 'S', 'd': 'D', 'f': 'F', 'g': 'G', 'h': 'H', 'j': 'J', 'k': 'K', 'l': 'L', ';': ':', "'": '"', 'z': 'Z', 'x': 'X', 'c': 'C', 'v': 'V', 'b': 'B', 'n': 'N', 'm': 'M', ',': '<', '.': '>', '/': '?'}
+    key = None
+    count = 0
+    while key==None:
+        # Checking if any shift is pressed
+        mods = pygame.key.get_mods()
+        left_shift_pressed = True if mods and pygame.KMOD_LSHIFT else False
+        right_shift_pressed = True if mods and pygame.KMOD_RSHIFT else False
+        shift_pressed = True if True in (left_shift_pressed, right_shift_pressed) else False
+
+        for event in pygame.event.get():
+            if event.type == pygame.KEYDOWN:
+                guess = pygame.key.name(event.key)
+                
+                if shift_pressed:
+                    guess = key_map_shift[guess] if shift_pressed is True else guess
+                    
+                key=guess
+                break
+
+        count += 1
+
+    return guess, 'right' if right_shift_pressed == True else ('left' if right_shift_pressed == True else None)
+
+
+
 def whats_highscore ():
     query = """
     with tbl1 as (
@@ -80,7 +143,7 @@ def whats_highscore ():
         , max(time) - min(time) game_duration
         , sum(case when correct_key = 1 then 1 else 0 end) keys_to_press
         , count(*) keys_pressed
-        , round(CAST(sum(case when correct_key = 1 then 1 else 0 end) as REAL) / count(*), 3) * 100 accuracy
+        , round(CAST(sum(case when correct_key = 1 then 1 else 0 end) as REAL) / count(*), 3) accuracy
         , round(sum(case when correct_key = 1 then 1 else 0 end) / ((max(time) - min(time)) / 60) / 4.7) wpm
 
     from keys_pressed
@@ -124,6 +187,17 @@ def score_game(key_pressed=None, game_id=None):
 
 
 
+def rule_force_shift(key_pressed, shift_pressed):
+    right = '`123456qwertgfdsazxcvb!~@#$%^QWERTASDFGZXCVB'
+    left = "7890-=yuiop[]\hjkl;'bnm,./"
+
+    if key_pressed not in eval(shift_pressed):
+        print('WRONG SHIFT KEY')
+        key_pressed = ' ' # 
+
+
+
+
 def main():
     # Generating text to be typed
     text = load_text()
@@ -136,6 +210,7 @@ def main():
     # Looping through each character to compare them to the last key pressed
     key_pressed = []
     sentence = sentence + ' ' # Adding one character at the end to validate the game (type enter)
+    print('\n'*5)
     for index, char in enumerate(sentence):
         # Replacing space by spelled word space to match it to the key
         if char == ' ':
@@ -146,37 +221,54 @@ def main():
             print('No more letters, press ENTER to save the game, any other to not.')
         else:     
             print('\n'*20)
-            words_to_display_count = 3
             words_to_display = ' '.join(sentence.split(' ')[:words_to_display_count])
             print(' ', words_to_display, '\t'*5, end='\r')
 
         # Looping through event key until the right key is pressed
         guess = '' 
         while guess != char:
-            for event in pygame.event.get():
-                if event.type == pygame.KEYDOWN:
-                    guess = pygame.key.name(event.key)
-                    # print(guess, char, sentence[-1], index, len(game_settings[0]), guess == char, guess == 'return' and index == len(game_settings[0]))
-                    
-                    if index == len(game_settings[0]): # For last character of sentence only
-                        if guess == 'return': # If last key pressed is enter, log the game otherwise not
+            guess, shift_pressed = next_key_pressed()
+
+            # if force_shift == True:
+            #     rule_force_shift(guess, shift_pressed)
+
+
+
+
+
+   
+
+
+
+
+    
+            # print(guess, char, sentence[-1], index, len(game_settings[0]), guess == char, guess == 'return' and index == len(game_settings[0]))
+            
+            if index == len(game_settings[0]): # For last character of sentence only
+                if guess == 'return': # If last key pressed is enter, log the game otherwise not
+                    log_game = True
+                else:
+                    if guess != 'return':
+                        double_check = input('Are you sure? Press ENTER to save the game')
+                        if double_check == '':
                             log_game = True
-                        else:
-                            log_game = False
-                        guess = char
-                        break
+                    else:        
+                        log_game = False
+                guess = char
+                break
+            
+            
+            else:
+                if guess == char: 
+                    correct_key = True
+                    key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
+                    sentence = sentence[1:]
+                    break
+                else:
                     
-                    
-                    else:
-                        if guess == char: 
-                            correct_key = True
-                            key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
-                            sentence = sentence[1:]
-                            break
-                        else:
-                            correct_key = False
-                            print(guess, words_to_display)
-                            key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
+                    correct_key = False
+                    print(guess, words_to_display)
+                    key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
 
 
     if log_game == True:
