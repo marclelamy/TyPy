@@ -18,7 +18,6 @@ max_word_length = None
 capitalized_words_count = 1 # Set a float between 0 and 1 for the percentage of word that will be generated with a/multiple random case letter
 capitalized_letters_count = .1 # Set a float between 0 and 1 for the percentage of the letters of the word that will be capitalized. Set an integer for the nmumber or random case statement letters. 1 is all letters capitalized not 1 word. if 'first' then only first letter will be 
 force_shift = True # Force to type the right shift of the keyboard
-words_to_display_count = 10
 me_playing = 1
 
 
@@ -61,23 +60,39 @@ def capitalize_random(sentence):
 
 
 
+def add_punctuation (words: list):
+    common_punctuations = ['()', '{}', '[]', '!', "''", '*', ',', '.', ';', ':']
 
-def pick_words(word_list, max_word_length, sentence_length=10):
+    for index, word in enumerate(words):
+        rdm_punctuation = np.random.choice(common_punctuations)
+
+        if len(rdm_punctuation) == 2:
+            word = rdm_punctuation[0] + word + rdm_punctuation[1]
+        else:
+            word += rdm_punctuation
+
+        words[index] = word
+
+
+
+def pick_words(word_list, max_word_length, sentence_length=10, capitalize=False, punctuation=False):
     '''returns a word based on criterias'''
 
-    random_word = []
-    while len(random_word) < sentence_length:
+    sentence = []
+    while len(sentence) < sentence_length:
         picked_word = np.random.choice(word_list).lower()
 
         if max_word_length == None:
-            random_word.append(picked_word)
+            sentence.append(picked_word)
 
         elif len(picked_word) <= max_word_length:
-            random_word.append(picked_word)
+            sentence.append(picked_word)
 
 
-    sentence = random_word
-    # sentence = capitalize_random(sentence)
+    if capitalize == True:
+        sentence = capitalize_random(sentence)
+    if punctuation == True:
+        sentence = add_punctuation(sentence)
 
     return ' '.join(sentence)
 
@@ -93,18 +108,16 @@ def pick_words(word_list, max_word_length, sentence_length=10):
 
 
 def log_key_pressed(key_pressed):
-    if me_playing == 1:
-        column_names = ['key', 'correct_key', 'time', 'game_id']
-        df_keys = pd.DataFrame(key_pressed, columns=column_names)
-        df_keys.to_sql('keys_pressed', con, if_exists='append', index=False)
-
-
+    column_names = ['key', 'correct_key', 'time', 'game_id']
+    df_keys = pd.DataFrame(key_pressed, columns=column_names)
+    df_keys.to_sql('keys_pressed', con, if_exists='append', index=False)
 
 def log_game_settings(game_settings):
-    if me_playing == 1:
-        column_names = ['sentence', 'sentence_length', 'max_word_length', 'game_id']
-        df_game_settings = pd.DataFrame([game_settings], columns=column_names)
-        df_game_settings.to_sql('games_settings', con, if_exists='append', index=False)
+    column_names = ['sentence', 'sentence_length', 'max_word_length', 'game_id']
+    df_game_settings = pd.DataFrame([game_settings], columns=column_names)
+    df_game_settings.to_sql('games_settings', con, if_exists='append', index=False)
+
+
 
 
 
@@ -164,7 +177,7 @@ def whats_highscore ():
     keys_pressed = df_high_score.loc[0, 'keys_pressed']
     accuracy = df_high_score.loc[0, 'accuracy']
     wpm = df_high_score.loc[0, 'wpm']
-    print(f'\nRECORD\nChar to type: {keys_to_press} | Char typed: {keys_pressed} | Game duration: {int(game_duration)}s | Typing Accuracy: {accuracy:.1%} | WPM: {round(wpm)}')
+    return f'Char to type: {keys_to_press} | Char typed: {keys_pressed} | Game duration: {int(game_duration)}s | Typing Accuracy: {accuracy:.1%} | WPM: {round(wpm)}' 
 
 
 
@@ -182,9 +195,14 @@ def score_game(key_pressed=None, game_id=None):
     typing_accuracy = char_to_type / char_typed
     wpm = char_to_type / (game_duration / 60) / 4.7
 
-    print(f'Char to type: {char_to_type} | Char typed: {char_typed} | Game duration: {int(game_duration)}s | Typing Accuracy: {typing_accuracy:.1%} | WPM: {round(wpm)}')
-    whats_highscore ()
-
+    score = f'Char to type: {char_to_type} | Char typed: {char_typed} | Game duration: {int(game_duration)}s | Typing Accuracy: {typing_accuracy:.1%} | WPM: {round(wpm)}'
+    best_score = whats_highscore ()
+    if score == best_score:
+        print('RECORD\t'*10)
+        print(score)
+    else:
+        print(score)
+        print('\nRECORD\n', best_score)
 
 
 def rule_force_shift(key_pressed, shift_pressed):
@@ -199,6 +217,7 @@ def rule_force_shift(key_pressed, shift_pressed):
 
 
 def main():
+    words_to_display_count = 5
     # Generating text to be typed
     text = load_text()
     sentence = pick_words(text, max_word_length, sentence_length)
