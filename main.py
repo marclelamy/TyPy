@@ -1,3 +1,4 @@
+from turtle import pu
 import numpy as np
 import pygame
 import sqlite3
@@ -13,12 +14,12 @@ current_dir = os.getcwd()
 
 # Game settings
 game_id = np.random.randint(10**10)
-sentence_length = np.random.randint(25, 40)
+sentence_length = 25#np.random.randint(25, 40)
 max_word_length = None
-capitalized_words_count = 1 # Set a float between 0 and 1 for the percentage of word that will be generated with a/multiple random case letter
-capitalized_letters_count = .1 # Set a float between 0 and 1 for the percentage of the letters of the word that will be capitalized. Set an integer for the nmumber or random case statement letters. 1 is all letters capitalized not 1 word. if 'first' then only first letter will be 
-force_shift = True # Force to type the right shift of the keyboard
-me_playing = 1
+capitalized_words_count = 0 # Set a float between 0 and 1 for the percentage of word that will be generated with a/multiple random case letter
+capitalized_letters_count_perc = 0 # Set a float between 0 and 1 for the percentage of the letters of the word that will be capitalized. Set an integer for the nmumber or random case statement letters. 1 is all letters capitalized not 1 word. if 'first' then only first letter will be capitalized
+punctuation_word_count_perc = 0# Same as above but for punctuation around the word
+force_shift = False # Force to type the right shift of the keyboard
 
 
 
@@ -33,26 +34,22 @@ def load_text (file_path=f'{current_dir}/data/common_words.txt') -> list:
 
 
 def capitalize_random(sentence):
-    capitalized_words_count = 1 # Set a float between 0 and 1 for the percentage of word that will be generated with a/multiple random case letter
-    capitalized_letters_perc = '0.8'
-    capitalized_words_count = round(len(sentence) * capitalized_words_count)
+    capitalized_words_sentence_count = round(len(sentence) * capitalized_words_count)
 
-    for index_word in range(capitalized_words_count):
-        word = sentence[index_word]
+    for index in range(capitalized_words_sentence_count):
+        word = sentence[index]
 
-        if type(capitalized_letters_perc) in [int, float]:
-            if capitalized_letters_perc <= 1:
-                capitalized_letters_count = round(len(word) * capitalized_letters_perc)
+        if type(capitalized_letters_count_perc) in [int, float]:
+            if capitalized_letters_count_perc <= 1:
+                capitalized_letters_sentence_count_perc = round(len(word) * capitalized_letters_count_perc)
 
             rdm_list = list(range(len(word)))
             np.random.shuffle(rdm_list)
-            rdm_list = rdm_list[:capitalized_letters_count]
-            sentence[index_word] = ''.join([char.upper() if index_char in rdm_list else char for index_char, char in enumerate(word)])
+            rdm_list = rdm_list[:capitalized_letters_sentence_count_perc]
+            sentence[index] = ''.join([char.upper() if index_char in rdm_list else char for index_char, char in enumerate(word)])
 
-        elif type(capitalized_letters_perc) == str:
-            sentence[index_word] = word.title()
-
-        
+        elif capitalized_letters_count_perc == 'first':
+            sentence[index] = word.title()
 
     np.random.shuffle(sentence)
 
@@ -60,10 +57,12 @@ def capitalize_random(sentence):
 
 
 
-def add_punctuation (words: list):
+def add_punctuation (sentence: list):
+    punctuation_sentence_count = round(len(sentence) * punctuation_word_count_perc)
     common_punctuations = ['()', '{}', '[]', '!', "''", '*', ',', '.', ';', ':']
 
-    for index, word in enumerate(words):
+    for index in range(punctuation_sentence_count):
+        word = sentence[index]
         rdm_punctuation = np.random.choice(common_punctuations)
 
         if len(rdm_punctuation) == 2:
@@ -71,11 +70,15 @@ def add_punctuation (words: list):
         else:
             word += rdm_punctuation
 
-        words[index] = word
+        sentence[index] = word
+
+    np.random.shuffle(sentence)
+
+    return sentence
 
 
 
-def pick_words(word_list, max_word_length, sentence_length=10, capitalize=False, punctuation=False):
+def pick_words(word_list, capitalize=False, punctuation=False):
     '''returns a word based on criterias'''
 
     sentence = []
@@ -89,22 +92,13 @@ def pick_words(word_list, max_word_length, sentence_length=10, capitalize=False,
             sentence.append(picked_word)
 
 
-    if capitalize == True:
-        sentence = capitalize_random(sentence)
-    if punctuation == True:
-        sentence = add_punctuation(sentence)
+    sentence = capitalize_random(sentence)
+    sentence = add_punctuation(sentence)
 
     return ' '.join(sentence)
 
 
 
-
-# dictionary=PyDictionary()
-# def get_definition (word):
-    # word_meaning = get_definition(word[0])
-    # sentence = word + ' - ' + word_meaning[list(word_meaning.keys())[0]][0]
-    # sentence = ''.join([char.lower() for char in sentence if char.isalpha() or char in (' ', '-')])
-    # return dictionary.meaning(word)
 
 
 def log_key_pressed(key_pressed):
@@ -113,11 +107,9 @@ def log_key_pressed(key_pressed):
     df_keys.to_sql('keys_pressed', con, if_exists='append', index=False)
 
 def log_game_settings(game_settings):
-    column_names = ['sentence', 'sentence_length', 'max_word_length', 'game_id']
+    column_names = ['sentence', 'sentence_length', 'max_word_length', 'game_id', 'capitalized_words_count', 'capitalized_letters_count_perc', 'punctuation_word_count_perc', 'force_shift']
     df_game_settings = pd.DataFrame([game_settings], columns=column_names)
     df_game_settings.to_sql('games_settings', con, if_exists='append', index=False)
-
-
 
 
 
@@ -147,7 +139,6 @@ def next_key_pressed():
     return guess, 'right' if right_shift_pressed == True else ('left' if right_shift_pressed == True else None)
 
 
-
 def whats_highscore ():
     query = """
     with tbl1 as (
@@ -157,7 +148,7 @@ def whats_highscore ():
         , sum(case when correct_key = 1 then 1 else 0 end) keys_to_press
         , count(*) keys_pressed
         , round(CAST(sum(case when correct_key = 1 then 1 else 0 end) as REAL) / count(*), 3) accuracy
-        , round(sum(case when correct_key = 1 then 1 else 0 end) / ((max(time) - min(time)) / 60) / 4.7) wpm
+        , round(sum(case when correct_key = 1 then 1 else 0 end) / ((max(time) - min(time)) / 60) / 5) wpm
 
     from keys_pressed
     where 1=1
@@ -177,7 +168,7 @@ def whats_highscore ():
     keys_pressed = df_high_score.loc[0, 'keys_pressed']
     accuracy = df_high_score.loc[0, 'accuracy']
     wpm = df_high_score.loc[0, 'wpm']
-    return f'Char to type: {keys_to_press} | Char typed: {keys_pressed} | Game duration: {int(game_duration)}s | Typing Accuracy: {accuracy:.1%} | WPM: {round(wpm)}' 
+    return f'Char to type: {keys_to_press} | Char typed: {keys_pressed} | Game duration: {int(game_duration)}s | Typing Accuracy: {accuracy:.1%} | WPM: {round(wpm)} | Score: {round(accuracy * wpm * 100)}' 
 
 
 
@@ -192,13 +183,14 @@ def score_game(key_pressed=None, game_id=None):
     game_duration = last_second - first_second
     char_typed = df.shape[0]
     char_to_type = df.query('correct_key == 1').shape[0]
-    typing_accuracy = char_to_type / char_typed
+    accuracy = char_to_type / char_typed
     wpm = char_to_type / (game_duration / 60) / 4.7
 
-    score = f'Char to type: {char_to_type} | Char typed: {char_typed} | Game duration: {int(game_duration)}s | Typing Accuracy: {typing_accuracy:.1%} | WPM: {round(wpm)}'
+    score = f'Char to type: {char_to_type} | Char typed: {char_typed} | Game duration: {int(game_duration)}s | Typing Accuracy: {accuracy:.1%} | WPM: {round(wpm)} | Score: {round(accuracy * wpm * 100)}'
     best_score = whats_highscore ()
     if score == best_score:
-        print('RECORD\t'*10)
+        for _ in range(10):
+            print('RECORD\t'*10)
         print(score)
     else:
         print(score)
@@ -206,40 +198,43 @@ def score_game(key_pressed=None, game_id=None):
 
 
 def rule_force_shift(key_pressed, shift_pressed):
-    right = '`123456qwertgfdsazxcvb!~@#$%^QWERTASDFGZXCVB'
-    left = "7890-=yuiop[]\hjkl;'bnm,./"
+    right = '~!@#$%^QWERTGFDSAZXCVB'
+    left = '&*()_+|}{POIUYHJKL:"?><MNB'
 
     if key_pressed not in eval(shift_pressed):
+        print(key_pressed, shift_pressed, eval(shift_pressed))
         print('WRONG SHIFT KEY')
-        key_pressed = ' ' # 
+        return ' '
 
+    else:
+        return key_pressed
 
 
 
 def main():
-    words_to_display_count = 5
     # Generating text to be typed
     text = load_text()
-    sentence = pick_words(text, max_word_length, sentence_length)
+    sentence = pick_words(text, punctuation=False)
 
-    game_settings = [sentence, sentence_length, max_word_length, game_id]
+    game_settings = [sentence, sentence_length, max_word_length, game_id, capitalized_words_count, capitalized_letters_count_perc, punctuation_word_count_perc, force_shift]
     print(game_settings)
 
     
     # Looping through each character to compare them to the last key pressed
     key_pressed = []
-    sentence = sentence + ' ' # Adding one character at the end to validate the game (type enter)
+    sentence = sentence + '⏎' # Adding one character at the end to validate the game (type enter)
     print('\n'*5)
     for index, char in enumerate(sentence):
         # Replacing space by spelled word space to match it to the key
         if char == ' ':
             char = 'space'
         
-        # Printing au updated sentence
+        # Printing updated sentence
         if index == len(game_settings[0]): 
             print('No more letters, press ENTER to save the game, any other to not.')
         else:     
             print('\n'*20)
+            words_to_display_count = 5
             words_to_display = ' '.join(sentence.split(' ')[:words_to_display_count])
             print(' ', words_to_display, '\t'*5, end='\r')
 
@@ -247,9 +242,10 @@ def main():
         guess = '' 
         while guess != char:
             guess, shift_pressed = next_key_pressed()
+            print(guess, shift_pressed)
 
-            # if force_shift == True:
-            #     rule_force_shift(guess, shift_pressed)
+            if force_shift == True and shift_pressed != None:
+                guess = rule_force_shift(guess, shift_pressed)
 
 
 
