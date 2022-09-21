@@ -18,8 +18,8 @@ sentence_length = 25#np.random.randint(25, 40)
 max_word_length = None
 capitalized_words_count = 0 # Set a float between 0 and 1 for the percentage of word that will be generated with a/multiple random case letter
 capitalized_letters_count_perc = 0 # Set a float between 0 and 1 for the percentage of the letters of the word that will be capitalized. Set an integer for the nmumber or random case statement letters. 1 is all letters capitalized not 1 word. if 'first' then only first letter will be capitalized
-punctuation_word_count_perc = 0# Same as above but for punctuation around the word
-force_shift = False # Force to type the right shift of the keyboard
+punctuation_word_count_perc = .3 # Same as above but for punctuation around the word
+force_shift = True # Force to type the right shift of the keyboard
 
 
 
@@ -59,12 +59,14 @@ def capitalize_random(sentence):
 
 def add_punctuation (sentence: list):
     punctuation_sentence_count = round(len(sentence) * punctuation_word_count_perc)
-    common_punctuations = ['()', '{}', '[]', '!', "''", '*', ',', '.', ';', ':']
+    print(punctuation_sentence_count)
+    common_punctuations = ['()', '{}', '[]', '!', "''", '*', ',', '.', ';', ':', '-', '_', ]
+    common_punctuations = [':']
+    rdm_punctuation = np.random.choice(common_punctuations)
 
     for index in range(punctuation_sentence_count):
         word = sentence[index]
-        rdm_punctuation = np.random.choice(common_punctuations)
-
+        
         if len(rdm_punctuation) == 2:
             word = rdm_punctuation[0] + word + rdm_punctuation[1]
         else:
@@ -128,7 +130,7 @@ def next_key_pressed():
             if event.type == pygame.KEYDOWN:
                 guess = pygame.key.name(event.key)
                 
-                if shift_pressed:
+                if shift_pressed and guess != 'space':
                     guess = key_map_shift[guess] if shift_pressed is True else guess
                     
                 key=guess
@@ -136,7 +138,7 @@ def next_key_pressed():
 
         count += 1
 
-    return guess, 'right' if right_shift_pressed == True else ('left' if right_shift_pressed == True else None)
+    return guess, 'right' if right_shift_pressed == True else ('left' if left_shift_pressed == True else None)
 
 
 def whats_highscore ():
@@ -184,7 +186,7 @@ def score_game(key_pressed=None, game_id=None):
     char_typed = df.shape[0]
     char_to_type = df.query('correct_key == 1').shape[0]
     accuracy = char_to_type / char_typed
-    wpm = char_to_type / (game_duration / 60) / 4.7
+    wpm = char_to_type / (game_duration / 60) / 5
 
     score = f'Char to type: {char_to_type} | Char typed: {char_typed} | Game duration: {int(game_duration)}s | Typing Accuracy: {accuracy:.1%} | WPM: {round(wpm)} | Score: {round(accuracy * wpm * 100)}'
     best_score = whats_highscore ()
@@ -198,12 +200,13 @@ def score_game(key_pressed=None, game_id=None):
 
 
 def rule_force_shift(key_pressed, shift_pressed):
-    right = '~!@#$%^QWERTGFDSAZXCVB'
-    left = '&*()_+|}{POIUYHJKL:"?><MNB'
+    right = '&*()_+|}{POIUYHJKL:"?><MNB'
+    left = '~!@#$%^QWERTGFDSAZXCVB'
 
     if key_pressed not in eval(shift_pressed):
+        print(key_pressed, shift_pressed)
         print(key_pressed, shift_pressed, eval(shift_pressed))
-        print('WRONG SHIFT KEY')
+        print('WRONG SHIFT KEY', '\n'*2)
         return ' '
 
     else:
