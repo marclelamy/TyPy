@@ -18,18 +18,92 @@ sentence_length = 25#np.random.randint(25, 40)
 max_word_length = None
 capitalized_words_count = 0 # Set a float between 0 and 1 for the percentage of word that will be generated with a/multiple random case letter
 capitalized_letters_count_perc = 0 # Set a float between 0 and 1 for the percentage of the letters of the word that will be capitalized. Set an integer for the nmumber or random case statement letters. 1 is all letters capitalized not 1 word. if 'first' then only first letter will be capitalized
-punctuation_word_count_perc = .3 # Same as above but for punctuation around the word
-force_shift = True # Force to type the right shift of the keyboard
+punctuation_word_count_perc = 0 # Same as above but for punctuation around the word
+force_shift = False # Force to type the right shift of the keyboard
+hard_mode = False # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed
+train_letters = True
 
 
-
-
-def load_text (file_path=f'{current_dir}/data/common_words.txt') -> list:
+def load_text () -> list:
     '''a '''
+
+    if hard_mode == True:
+        file_path = f'{current_dir}/data/words.txt'
+    else: 
+        file_path = f'{current_dir}/data/common_words.txt'
+        
     with open(file_path) as file: 
         all_words = file.read().split('\n')
 
     return all_words
+       
+
+
+# Function to read text file 
+def load_query (query_name) -> list:
+    '''Opens a given text file name and execute the 
+    query to return a pd.DataFrame
+    
+    Parameter
+    ---------
+    query_name str: name of the file name to run
+    '''
+
+    # Open file and get the query 
+    with open(f'{current_dir}/data/queries/{query_name}') as file: 
+        query = file.read()
+
+    # Query database
+    df = pd.read_sql_query(query, con)
+
+    return df
+
+
+
+def query_n_past_games_words(n_past_games=4):
+    '''returns all words used in the last n games'''
+
+    query_npast_games_words = f'''
+        select
+            trim(sentence) sentence
+            , max(time)
+
+        from keys_pressed kp
+        left join games_settings gs using(game_id)
+        where 1=1
+            and game_id > 100
+            and sentence not null
+        group by 1
+        order by 2 desc
+        limit {n_past_games}
+        '''
+
+    df_query = pd.read_sql_query(query_npast_games_words, con)
+    df_query['sentence'] = df_query['sentence'].apply(lambda sentence: ''.join([char for char in sentence if char.isalpha() or char == ' ']))
+    done_words = ' '.join(df_query['sentence']).split(' ')
+    # done_words = [''.join([char for char in word if char.isalpha()]) for word in done_words]
+    return done_words
+
+
+
+def get_n_slowest_words(word_count):
+    # Load key score 
+    df_keytime = load_query('time_per_key_pressed.sql')
+    key_score = dict(zip(df_keytime['following_key'], df_keytime['time_diff'].round(3)))
+
+    # Get score for each word
+    words = load_text()
+    df_words = pd.DataFrame(words, columns=['word'])
+    df_words['word_score'] = df_words['word'].apply(lambda word: sum([key_score[char] for char in word.lower() if char in key_score.keys()]))
+    df_words['avg_letter_score'] = df_words['word_score'] / df_words['word'].str.len()
+
+    # Remove words done in the past four games
+    done_words = query_n_past_games_words(4)
+    df_words = df_words[df_words['word'].isin(done_words) == False]
+
+    # Sort dataframe and pick the top 25 words
+    top_25 = df_words.sort_values('avg_letter_score', ascending=False).query('word.str.len() > 4').iloc[:word_count, 0]
+    return list(top_25)
 
 
 
@@ -61,7 +135,8 @@ def add_punctuation (sentence: list):
     punctuation_sentence_count = round(len(sentence) * punctuation_word_count_perc)
     print(punctuation_sentence_count)
     common_punctuations = ['()', '{}', '[]', '!', "''", '*', ',', '.', ';', ':', '-', '_', ]
-    common_punctuations = [':']
+    common_punctuations = ['()', '!', "''", '*', ',', '.', ';', ':', '-', '_', '<', '>', '/', '?', '=']
+    # common_punctuations = ['{}']
     rdm_punctuation = np.random.choice(common_punctuations)
 
     for index in range(punctuation_sentence_count):
@@ -80,19 +155,23 @@ def add_punctuation (sentence: list):
 
 
 
-def pick_words(word_list, capitalize=False, punctuation=False):
+def pick_words():
     '''returns a word based on criterias'''
 
-    sentence = []
-    while len(sentence) < sentence_length:
-        picked_word = np.random.choice(word_list).lower()
+    if train_letters != True:
+        word_list = load_text()
+        sentence = []
+        while len(sentence) < sentence_length:
+            picked_word = np.random.choice(word_list).lower()
 
-        if max_word_length == None:
-            sentence.append(picked_word)
+            if max_word_length == None:
+                sentence.append(picked_word)
 
-        elif len(picked_word) <= max_word_length:
-            sentence.append(picked_word)
+            elif len(picked_word) <= max_word_length:
+                sentence.append(picked_word)
 
+    else:
+        sentence = get_n_slowest_words(sentence_length)
 
     sentence = capitalize_random(sentence)
     sentence = add_punctuation(sentence)
@@ -203,9 +282,8 @@ def rule_force_shift(key_pressed, shift_pressed):
     right = '&*()_+|}{POIUYHJKL:"?><MNB'
     left = '~!@#$%^QWERTGFDSAZXCVB'
 
-    if key_pressed not in eval(shift_pressed):
+    if key_pressed in eval(shift_pressed):
         print(key_pressed, shift_pressed)
-        print(key_pressed, shift_pressed, eval(shift_pressed))
         print('WRONG SHIFT KEY', '\n'*2)
         return ' '
 
@@ -216,9 +294,7 @@ def rule_force_shift(key_pressed, shift_pressed):
 
 def main():
     # Generating text to be typed
-    text = load_text()
-    sentence = pick_words(text, punctuation=False)
-
+    sentence = pick_words()
     game_settings = [sentence, sentence_length, max_word_length, game_id, capitalized_words_count, capitalized_letters_count_perc, punctuation_word_count_perc, force_shift]
     print(game_settings)
 
@@ -245,7 +321,7 @@ def main():
         guess = '' 
         while guess != char:
             guess, shift_pressed = next_key_pressed()
-            print(guess, shift_pressed)
+            # print(guess, shift_pressed)
 
             if force_shift == True and shift_pressed != None:
                 guess = rule_force_shift(guess, shift_pressed)
@@ -283,7 +359,6 @@ def main():
                     sentence = sentence[1:]
                     break
                 else:
-                    
                     correct_key = False
                     print(guess, words_to_display)
                     key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
