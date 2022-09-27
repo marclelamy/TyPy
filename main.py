@@ -12,20 +12,34 @@ con = sqlite3.connect("database.db")
 current_dir = os.getcwd()
 
 
+
+
+
+
+
+
+
 # Game settings
 game_id = np.random.randint(10**10)
-sentence_length = 25#np.random.randint(25, 40)
+sentence_length = 25 #np.random.randint(25, 40)
 max_word_length = None
 capitalized_words_count = 0 # Set a float between 0 and 1 for the percentage of word that will be generated with a/multiple random case letter
 capitalized_letters_count_perc = 0 # Set a float between 0 and 1 for the percentage of the letters of the word that will be capitalized. Set an integer for the nmumber or random case statement letters. 1 is all letters capitalized not 1 word. if 'first' then only first letter will be capitalized
-punctuation_word_count_perc = 0 # Same as above but for punctuation around the word
+punctuation_word_count_perc = .2 # Same as above but for punctuation around the word
 force_shift = False # Force to type the right shift of the keyboard
 hard_mode = False # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed
 train_letters = True
 
 
-def load_text () -> list:
-    '''a '''
+
+
+
+def load_words() -> list:
+    '''Opens one of two lists of words depending on the difficulty. 
+    Common_words.txt contains 3000 common words where words.txt contains 
+    about 450k words generally longer and harder to type compared to the 
+    common word list.
+    '''
 
     if hard_mode == True:
         file_path = f'{current_dir}/data/words.txt'
@@ -38,9 +52,7 @@ def load_text () -> list:
     return all_words
        
 
-
-# Function to read text file 
-def load_query (query_name) -> list:
+def load_query (query_name: str) -> list:
     '''Opens a given text file name and execute the 
     query to return a pd.DataFrame
     
@@ -59,9 +71,14 @@ def load_query (query_name) -> list:
     return df
 
 
-
-def query_n_past_games_words(n_past_games=4):
-    '''returns all words used in the last n games'''
+def query_n_past_games_words(n_past_games: int) -> str:
+    '''Query the past n games and returns all 
+    words in used in them.
+    
+    parameter
+    ---------
+    n_past_games int: number of games to query
+    '''
 
     query_npast_games_words = f'''
         select
@@ -79,35 +96,51 @@ def query_n_past_games_words(n_past_games=4):
         '''
 
     df_query = pd.read_sql_query(query_npast_games_words, con)
-    df_query['sentence'] = df_query['sentence'].apply(lambda sentence: ''.join([char for char in sentence if char.isalpha() or char == ' ']))
     done_words = ' '.join(df_query['sentence']).split(' ')
-    # done_words = [''.join([char for char in word if char.isalpha()]) for word in done_words]
     return done_words
 
 
+def get_n_slowest_words(word_count: list) -> list:
+    '''Among the list of word, find the words that would 
+    potentially take the longest to type based on the 
+    average duration it takes to the player to type all 
+    each and individual letters of the words.
 
-def get_n_slowest_words(word_count):
+    parameters
+    ----------
+    word_count int: numbers of worst words to return
+    
+    '''
     # Load key score 
     df_keytime = load_query('time_per_key_pressed.sql')
     key_score = dict(zip(df_keytime['following_key'], df_keytime['time_diff'].round(3)))
 
     # Get score for each word
-    words = load_text()
+    words = load_words()
     df_words = pd.DataFrame(words, columns=['word'])
     df_words['word_score'] = df_words['word'].apply(lambda word: sum([key_score[char] for char in word.lower() if char in key_score.keys()]))
     df_words['avg_letter_score'] = df_words['word_score'] / df_words['word'].str.len()
 
     # Remove words done in the past four games
     done_words = query_n_past_games_words(4)
+    # Remove punctuation
+    done_words = [''.join([char for char in word if char.isalpha() or char == ' ']) for word in done_words]
     df_words = df_words[df_words['word'].isin(done_words) == False]
 
-    # Sort dataframe and pick the top 25 words
-    top_25 = df_words.sort_values('avg_letter_score', ascending=False).query('word.str.len() > 4').iloc[:word_count, 0]
-    return list(top_25)
+    # Sort dataframe and pick the top 25 words with at least four letters
+    top_n = df_words.sort_values('avg_letter_score', ascending=False).query('word.str.len() > 4').iloc[:word_count, 0]
+    return list(top_n)
 
 
-
-def capitalize_random(sentence):
+def capitalize_random(sentence: list) -> list:
+    '''Given a list of words, capitalized_words_count and 
+    capitalized_letters_count_perc (terrible naming I know), 
+    capitalizes some letters.
+    
+    parameters
+    ----------
+    sentence list: list of words
+    '''
     capitalized_words_sentence_count = round(len(sentence) * capitalized_words_count)
 
     for index in range(capitalized_words_sentence_count):
@@ -130,8 +163,14 @@ def capitalize_random(sentence):
     return sentence
 
 
-
 def add_punctuation (sentence: list):
+    '''Given a list of word and punctuation_word_count_perc,
+    randomly chooses a punctuation and adds it to the words
+    
+    parameter
+    ---------
+    sentence str: list of word
+    '''
     punctuation_sentence_count = round(len(sentence) * punctuation_word_count_perc)
     print(punctuation_sentence_count)
     common_punctuations = ['()', '{}', '[]', '!', "''", '*', ',', '.', ';', ':', '-', '_', ]
@@ -154,12 +193,11 @@ def add_punctuation (sentence: list):
     return sentence
 
 
-
-def pick_words():
-    '''returns a word based on criterias'''
+def pick_sentence():
+    '''Based on the game settings, generates a list of words'''
 
     if train_letters != True:
-        word_list = load_text()
+        word_list = load_words()
         sentence = []
         while len(sentence) < sentence_length:
             picked_word = np.random.choice(word_list).lower()
@@ -179,19 +217,26 @@ def pick_words():
     return ' '.join(sentence)
 
 
-
-
-
 def log_key_pressed(key_pressed):
     column_names = ['key', 'correct_key', 'time', 'game_id']
     df_keys = pd.DataFrame(key_pressed, columns=column_names)
     df_keys.to_sql('keys_pressed', con, if_exists='append', index=False)
 
-def log_game_settings(game_settings):
-    column_names = ['sentence', 'sentence_length', 'max_word_length', 'game_id', 'capitalized_words_count', 'capitalized_letters_count_perc', 'punctuation_word_count_perc', 'force_shift']
-    df_game_settings = pd.DataFrame([game_settings], columns=column_names)
-    df_game_settings.to_sql('games_settings', con, if_exists='append', index=False)
 
+def log_game_settings():
+    column_names = ['game_id', 'games_settings']
+    game_settings = {'sentence': sentence, 
+                     'sentence_length': sentence_length, 
+                     'max_word_length': max_word_length, 
+                     'capitalized_words_count': capitalized_words_count, 
+                     'capitalized_letters_count_perc': capitalized_letters_count_perc, 
+                     'punctuation_word_count_perc': punctuation_word_count_perc, 
+                     'force_shift': force_shift,
+                     'hard_mode': hard_mode,
+                     'train_letters': train_letters}
+    game_settings = [game_id, str(game_settings)]
+    df_game_settings = pd.DataFrame([game_settings], columns=column_names)
+    df_game_settings.to_sql('games', con, if_exists='append', index=False)
 
 
 def next_key_pressed():
@@ -222,26 +267,26 @@ def next_key_pressed():
 
 def whats_highscore ():
     query = """
-    with tbl1 as (
-    select
-        game_id
-        , max(time) - min(time) game_duration
-        , sum(case when correct_key = 1 then 1 else 0 end) keys_to_press
-        , count(*) keys_pressed
-        , round(CAST(sum(case when correct_key = 1 then 1 else 0 end) as REAL) / count(*), 3) accuracy
-        , round(sum(case when correct_key = 1 then 1 else 0 end) / ((max(time) - min(time)) / 60) / 5) wpm
+        with tbl1 as (
+        select
+            game_id
+            , max(time) - min(time) game_duration
+            , sum(case when correct_key = 1 then 1 else 0 end) keys_to_press
+            , count(*) keys_pressed
+            , round(CAST(sum(case when correct_key = 1 then 1 else 0 end) as REAL) / count(*), 3) accuracy
+            , round(sum(case when correct_key = 1 then 1 else 0 end) / ((max(time) - min(time)) / 60) / 5) wpm
 
-    from keys_pressed
-    where 1=1
-        --and game_id = 3513153090
-    group by 1
-    having
-        count(*) >= 20
-    )
+        from keys_pressed
+        where 1=1
+            --and game_id = 3513153090
+        group by 1
+        having
+            count(*) >= 20
+        )
 
-    select * from tbl1
-    where wpm = (select max(wpm) from tbl1)
-    """
+        select * from tbl1
+        where wpm = (select max(wpm) from tbl1)
+        """
 
     df_high_score = pd.read_sql_query(query, con)
     game_duration = df_high_score.loc[0, 'game_duration']
@@ -250,7 +295,6 @@ def whats_highscore ():
     accuracy = df_high_score.loc[0, 'accuracy']
     wpm = df_high_score.loc[0, 'wpm']
     return f'Char to type: {keys_to_press} | Char typed: {keys_pressed} | Game duration: {int(game_duration)}s | Typing Accuracy: {accuracy:.1%} | WPM: {round(wpm)} | Score: {round(accuracy * wpm * 100)}' 
-
 
 
 def score_game(key_pressed=None, game_id=None):
@@ -291,12 +335,12 @@ def rule_force_shift(key_pressed, shift_pressed):
         return key_pressed
 
 
-
-def main():
+def main(): 
+    global sentence
     # Generating text to be typed
-    sentence = pick_words()
-    game_settings = [sentence, sentence_length, max_word_length, game_id, capitalized_words_count, capitalized_letters_count_perc, punctuation_word_count_perc, force_shift]
-    print(game_settings)
+    sentence = pick_sentence()
+    # game_settings = [sentence, sentence_length, max_word_length, game_id, capitalized_words_count, capitalized_letters_count_perc, punctuation_word_count_perc, force_shift]
+    sentence_length = len(sentence)
 
     
     # Looping through each character to compare them to the last key pressed
@@ -309,7 +353,7 @@ def main():
             char = 'space'
         
         # Printing updated sentence
-        if index == len(game_settings[0]): 
+        if index == sentence_length: 
             print('No more letters, press ENTER to save the game, any other to not.')
         else:     
             print('\n'*20)
@@ -336,43 +380,23 @@ def main():
 
 
     
-            # print(guess, char, sentence[-1], index, len(game_settings[0]), guess == char, guess == 'return' and index == len(game_settings[0]))
-            
-            if index == len(game_settings[0]): # For last character of sentence only
-                if guess == 'return': # If last key pressed is enter, log the game otherwise not
-                    log_game = True
-                else:
-                    if guess != 'return':
-                        double_check = input('Are you sure? Press ENTER to save the game')
-                        if double_check == '':
-                            log_game = True
-                    else:        
-                        log_game = False
-                guess = char
+            # print(guess, char, sentence[-1], index, sentence_length, guess == char, guess == 'return' and index == sentence_length)
+            if guess == char: 
+                correct_key = True
+                key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
+                sentence = sentence[1:]
                 break
-            
-            
             else:
-                if guess == char: 
-                    correct_key = True
-                    key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
-                    sentence = sentence[1:]
-                    break
-                else:
-                    correct_key = False
-                    print(guess, words_to_display)
-                    key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
+                correct_key = False
+                print(guess, words_to_display)
+                key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
 
 
-    if log_game == True:
-        log_key_pressed(key_pressed=key_pressed)
-        log_game_settings(game_settings)
+
+    log_key_pressed(key_pressed=key_pressed)
+    log_game_settings()
 
     score_game(key_pressed)
-
-
-
-
 
 
 
