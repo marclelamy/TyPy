@@ -21,15 +21,15 @@ current_dir = os.getcwd()
 
 # Game settings
 game_id = np.random.randint(10**10)
-sentence_length = 25 #np.random.randint(25, 40)
+sentence_length = 2 #np.random.randint(25, 40)
 max_word_length = None
 capitalized_words_count = 0 # Set a float between 0 and 1 for the percentage of word that will be generated with a/multiple random case letter
 capitalized_letters_count_perc = 0 # Set a float between 0 and 1 for the percentage of the letters of the word that will be capitalized. Set an integer for the nmumber or random case statement letters. 1 is all letters capitalized not 1 word. if 'first' then only first letter will be capitalized
 punctuation_word_count_perc = .2 # Same as above but for punctuation around the word
 force_shift = False # Force to type the right shift of the keyboard
 hard_mode = False # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed
-train_letters = True
-
+train_letters = False
+comment = 'high'
 
 
 
@@ -224,7 +224,7 @@ def log_key_pressed(key_pressed):
 
 
 def log_game_settings():
-    column_names = ['game_id', 'games_settings']
+    column_names = ['game_id', 'game_settings']
     game_settings = {'sentence': sentence, 
                      'sentence_length': sentence_length, 
                      'max_word_length': max_word_length, 
@@ -233,10 +233,11 @@ def log_game_settings():
                      'punctuation_word_count_perc': punctuation_word_count_perc, 
                      'force_shift': force_shift,
                      'hard_mode': hard_mode,
-                     'train_letters': train_letters}
+                     'train_letters': train_letters,
+                     'comment': comment}
     game_settings = [game_id, str(game_settings)]
     df_game_settings = pd.DataFrame([game_settings], columns=column_names)
-    df_game_settings.to_sql('games', con, if_exists='append', index=False)
+    df_game_settings.to_sql('games_settings', con, if_exists='append', index=False)
 
 
 def next_key_pressed():
@@ -275,26 +276,36 @@ def whats_highscore ():
             , count(*) keys_pressed
             , round(CAST(sum(case when correct_key = 1 then 1 else 0 end) as REAL) / count(*), 3) accuracy
             , round(sum(case when correct_key = 1 then 1 else 0 end) / ((max(time) - min(time)) / 60) / 5) wpm
+            , gs.game_settings
 
         from keys_pressed
+        left join games_settings gs using(game_id)
         where 1=1
             --and game_id = 3513153090
         group by 1
-        having
-            count(*) >= 20
         )
 
-        select * from tbl1
-        where wpm = (select max(wpm) from tbl1)
+        select 
+            *
+        
+        from tbl1
+        where 1=1
+            --wpm = (select max(wpm) from tbl1)
         """
 
+    # query = 'select * from keys_pressed left join games_settings gs using(game_id)'
+
     df_high_score = pd.read_sql_query(query, con)
+    df_high_score['score'] = df_high_score['accuracy'] * df_high_score['wpm'] * df_high_score['game_settings'].apply(lambda x: len(eval(x)['sentence']))
+    df_high_score = df_high_score.sort_values('score', ascending=False).reset_index(drop=True)
     game_duration = df_high_score.loc[0, 'game_duration']
     keys_to_press = df_high_score.loc[0, 'keys_to_press']
     keys_pressed = df_high_score.loc[0, 'keys_pressed']
     accuracy = df_high_score.loc[0, 'accuracy']
     wpm = df_high_score.loc[0, 'wpm']
-    return f'Char to type: {keys_to_press} | Char typed: {keys_pressed} | Game duration: {int(game_duration)}s | Typing Accuracy: {accuracy:.1%} | WPM: {round(wpm)} | Score: {round(accuracy * wpm * 100)}' 
+    sentence = eval(df_high_score.loc[0, 'game_settings'])['sentence']
+    score = df_high_score.loc[0, 'score']
+    return f'Char to type: {keys_to_press} | Char typed: {keys_pressed} | Game duration: {int(game_duration)}s | Typing Accuracy: {accuracy:.1%} | WPM: {round(wpm)} | Score: {score}' 
 
 
 def score_game(key_pressed=None, game_id=None):
@@ -311,7 +322,8 @@ def score_game(key_pressed=None, game_id=None):
     accuracy = char_to_type / char_typed
     wpm = char_to_type / (game_duration / 60) / 5
 
-    score = f'Char to type: {char_to_type} | Char typed: {char_typed} | Game duration: {int(game_duration)}s | Typing Accuracy: {accuracy:.1%} | WPM: {round(wpm)} | Score: {round(accuracy * wpm * 100)}'
+    score = f'Char to type: {char_to_type} | Char typed: {char_typed} | Game duration: {int(game_duration)}s | Typing Accuracy: {accuracy:.1%} | WPM: {round(wpm)} | Score: {round(accuracy * wpm * len(sentence))}'
+
     best_score = whats_highscore ()
     if score == best_score:
         for _ in range(10):
@@ -345,9 +357,9 @@ def main():
     
     # Looping through each character to compare them to the last key pressed
     key_pressed = []
-    sentence = sentence + '⏎' # Adding one character at the end to validate the game (type enter)
+    sentence_to_display = sentence + '⏎' # Adding one character at the end to validate the game (type enter)
     print('\n'*5)
-    for index, char in enumerate(sentence):
+    for index, char in enumerate(sentence_to_display):
         # Replacing space by spelled word space to match it to the key
         if char == ' ':
             char = 'space'
@@ -358,7 +370,7 @@ def main():
         else:     
             print('\n'*20)
             words_to_display_count = 5
-            words_to_display = ' '.join(sentence.split(' ')[:words_to_display_count])
+            words_to_display = ' '.join(sentence_to_display.split(' ')[:words_to_display_count])
             print(' ', words_to_display, '\t'*5, end='\r')
 
         # Looping through event key until the right key is pressed
@@ -378,13 +390,16 @@ def main():
 
 
 
+            if index == sentence_length: # For last character of sentence only
+                log_game = True
+                guess = char
+                break
 
-    
             # print(guess, char, sentence[-1], index, sentence_length, guess == char, guess == 'return' and index == sentence_length)
             if guess == char: 
                 correct_key = True
                 key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
-                sentence = sentence[1:]
+                sentence_to_display = sentence_to_display[1:]
                 break
             else:
                 correct_key = False
@@ -392,9 +407,9 @@ def main():
                 key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
 
 
-
-    log_key_pressed(key_pressed=key_pressed)
-    log_game_settings()
+    if log_game == True:
+        log_key_pressed(key_pressed=key_pressed)
+        log_game_settings()
 
     score_game(key_pressed)
 
