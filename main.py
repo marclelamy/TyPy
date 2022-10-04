@@ -24,13 +24,15 @@ current_dir = os.getcwd()
 game_id = np.random.randint(10**10)
 sentence_length = 25 #np.random.randint(25, 40)
 max_word_length = None
+min_word_length = None
 capitalized_words_count = 0 # Set a float between 0 and 1 for the percentage of word that will be generated with a/multiple random case letter
 capitalized_letters_count_perc = 0 # Set a float between 0 and 1 for the percentage of the letters of the word that will be capitalized. Set an integer for the nmumber or random case statement letters. 1 is all letters capitalized not 1 word. if 'first' then only first letter will be capitalized
 punctuation_word_count_perc = 0 # Same as above but for punctuation around the word
 force_shift = False # Force to type the right shift of the keyboard
-hard_mode = True # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed
-train_letters = True
+hard_mode = False # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed
+train_letters = False
 query_to_type = 'time_per_key_pressed'
+
 player_name = 'Marc'
 
 
@@ -125,11 +127,11 @@ def get_n_slowest_words(word_count: list) -> list:
     # Get score for each word
     words = load_words()
     df_words = pd.DataFrame(words, columns=['word'])
-    df_words['word_score'] = df_words['word'].apply(lambda word: sum([key_score[char] for char in word.lower() if char in key_score.keys()]))
+    df_words['word_score'] = df_words['word'].apply(lambda word: sum([key_score[char] for char in word.lower().replace('-', '') if char in key_score.keys()]))
     df_words['avg_letter_score'] = df_words['word_score'] / df_words['word'].str.len()
 
     # Remove words done in the past four games
-    done_words = query_n_past_games_words(4)
+    done_words = query_n_past_games_words(8)
     # Remove punctuation
     done_words = [''.join([char for char in word if char.isalpha() or char == ' ']) for word in done_words]
     df_words = df_words[df_words['word'].isin(done_words) == False]
@@ -246,6 +248,11 @@ def log_game_settings():
     df_game_settings = pd.DataFrame([game_settings], columns=column_names)
     df_game_settings.to_sql('games_settings', con, if_exists='append', index=False)
 
+def clean_games_settings():
+    df = pd.read_sql_query('select * from games_settings', con)
+    df['game_settings'] = df['game_settings'].apply(lambda x: eval(x))
+    df_games_settings = pd.concat([df[['game_id']], df['game_settings'].apply(lambda x: pd.Series(x))], axis=1)
+    df_games_settings.to_sql('clean_games_settings', con, if_exists='append', index=False)
 
 def next_key_pressed():
     key_map_shift = {'`': '~', '1': '!', '2': '@', '3': '#', '4': '$', '5': '%', '6': '^', '7': '&', '8': '*', '9': '(', '0': ')', '-': '_', '=': '+', 'q': 'Q', 'w': 'W', 'e': 'E', 'r': 'R', 't': 'T', 'y': 'Y', 'u': 'U', 'i': 'I', 'o': 'O', 'p': 'P', '[': '{', ']': '}', "''": '|', 'a': 'A', 's': 'S', 'd': 'D', 'f': 'F', 'g': 'G', 'h': 'H', 'j': 'J', 'k': 'K', 'l': 'L', ';': ':', "'": '"', 'z': 'Z', 'x': 'X', 'c': 'C', 'v': 'V', 'b': 'B', 'n': 'N', 'm': 'M', ',': '<', '.': '>', '/': '?'}
@@ -273,8 +280,8 @@ def next_key_pressed():
     return guess, 'right' if right_shift_pressed == True else ('left' if left_shift_pressed == True else None)
 
 
-def whats_bestscore (sort_by='score'):
-    query = """
+def whats_bestscore (sort_by='score', condition=''):
+    query = f"""
         with tbl1 as (
         select
             game_id
@@ -288,6 +295,7 @@ def whats_bestscore (sort_by='score'):
         from keys_pressed
         left join games_settings gs using(game_id)
         where 1=1
+            {condition}
             --and game_id = 3513153090
         group by 1
         )
@@ -529,7 +537,7 @@ def main():
     # if log_game == True:
     log_key_pressed(key_pressed=key_pressed)
     log_game_settings()
-
+    clean_games_settings()
 
 
 
