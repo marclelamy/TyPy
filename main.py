@@ -3,13 +3,19 @@ import numpy as np
 import pygame
 import sqlite3
 import pandas as pd
+from tabulate import tabulate
 import time
 # from PyDictionary import PyDictionary
 import os
+from pyparsing import conditionAsParseAction
 from termcolor import colored
 
+from src.score import Score
+from src.log_data import *
+
+pd.set_option('display.float_format', lambda x: '%.2f' % x)
 pygame.init()
-con = sqlite3.connect("main_database.db")
+con = sqlite3.connect("data/main_database.db")
 current_dir = os.getcwd()
 
 
@@ -22,18 +28,31 @@ current_dir = os.getcwd()
 
 # Game settings
 game_id = np.random.randint(10**10)
-sentence_length = 25 #np.random.randint(25, 40)
-max_word_length = None
+word_count = 25 #np.random.randint(25, 40)
 min_word_length = None
+max_word_length = None
 capitalized_words_count = 0 # Set a float between 0 and 1 for the percentage of word that will be generated with a/multiple random case letter
 capitalized_letters_count_perc = 0 # Set a float between 0 and 1 for the percentage of the letters of the word that will be capitalized. Set an integer for the nmumber or random case statement letters. 1 is all letters capitalized not 1 word. if 'first' then only first letter will be capitalized
 punctuation_word_count_perc = 0 # Same as above but for punctuation around the word
 force_shift = False # Force to type the right shift of the keyboard
 hard_mode = False # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed
-train_letters = False
-query_to_type = 'time_per_key_pressed'
+train_letters = True
+player_name = 'marc'
 
-player_name = ' hehjksdhfkjhsd'
+game_settings = {'game_id': game_id,
+                'word_count': word_count, 
+                'min_word_length': min_word_length, 
+                'max_word_length': max_word_length, 
+                'capitalized_words_count': capitalized_words_count, 
+                'capitalized_letters_count_perc': capitalized_letters_count_perc, 
+                'punctuation_word_count_perc': punctuation_word_count_perc, 
+                'force_shift': force_shift,
+                'hard_mode': hard_mode,
+                'train_letters': train_letters,
+                'player_name': player_name}
+
+
+
 
 
 
@@ -53,7 +72,8 @@ def load_words() -> list:
     with open(file_path) as file: 
         all_words = file.read().split('\n')
 
-    return all_words
+    lowered_words = [word.lower() for word in all_words]
+    return lowered_words
        
 
 def load_query (query_name: str, text_only: bool = False) -> list:
@@ -86,6 +106,10 @@ def query_n_past_games_words(n_past_games: int) -> str:
     ---------
     n_past_games int: number of games to query
     '''
+    if n_past_games == -1: 
+        limit_rows = ''
+    else:
+        limit_rows = f'limit {n_past_games}'
 
     query_npast_games_words = f'''
         select
@@ -99,13 +123,12 @@ def query_n_past_games_words(n_past_games: int) -> str:
             and sentence not null
         group by 1
         order by 2 desc
-        limit {n_past_games}
+        {limit_rows}
         '''
 
     df_query = pd.read_sql_query(query_npast_games_words, con)
     done_words = ' '.join(df_query['sentence']).split(' ')
     return done_words
-
 
 
 def get_n_slowest_words(word_count: list) -> list:
@@ -139,6 +162,8 @@ def get_n_slowest_words(word_count: list) -> list:
     # Sort dataframe and pick the top 25 words with at least four letters
     top_n = df_words.sort_values('avg_letter_score', ascending=False).query('word.str.len() > 4').iloc[:word_count, 0]
     return list(top_n)
+
+
 
 
 def capitalize_random(sentence: list) -> list:
@@ -181,7 +206,6 @@ def add_punctuation (sentence: list):
     sentence str: list of word
     '''
     punctuation_sentence_count = round(len(sentence) * punctuation_word_count_perc)
-    print(punctuation_sentence_count)
     common_punctuations = ['()', '{}', '[]', '!', "''", '*', ',', '.', ';', ':', '-', '_', ]
     common_punctuations = ['()', '!', "''", '*', ',', '.', ';', ':', '-', '_', '<', '>', '/', '?', '=']
     # common_punctuations = ['{}']
@@ -205,20 +229,27 @@ def add_punctuation (sentence: list):
 def pick_sentence():
     '''Based on the game settings, generates a list of words'''
 
-    if train_letters != True:
+    if train_letters == False:
+        done_words = query_n_past_games_words(-1)
         word_list = load_words()
-        sentence = []
-        while len(sentence) < sentence_length:
-            picked_word = np.random.choice(word_list).lower()
+        pickable_words = set(word_list).difference(set(done_words))
+        pickable_words = [word for word in list(pickable_words) if max_word_length == None or min_word_length <= len(word) <= max_word_length]
+        np.random.shuffle(pickable_words)
+        sentence = pickable_words[:word_count]
+        print(sentence)
 
-            if max_word_length == None:
-                sentence.append(picked_word)
 
-            elif len(picked_word) <= max_word_length:
-                sentence.append(picked_word)
+
+
+        # sentence = []
+        # while len(sentence) < word_count:
+        #     picked_word = np.random.choice(pickable_words).lower()
+
+        #     if max_word_length == None or min_word_length <= len(picked_word) <= max_word_length:
+        #         sentence.append(picked_word)
 
     else:
-        sentence = get_n_slowest_words(sentence_length)
+        sentence = get_n_slowest_words(word_count)
 
     sentence = capitalize_random(sentence)
     sentence = add_punctuation(sentence)
@@ -226,78 +257,6 @@ def pick_sentence():
     return ' '.join(sentence)
 
 
-
-
-
-def log_key_pressed(key_pressed):
-    column_names = ['key', 'correct_key', 'time', 'game_id']
-    df_keys = pd.DataFrame(key_pressed, columns=column_names)
-    df_keys.to_sql('keys_pressed', con, if_exists='append', index=False)
-
-def log_game_settings():
-    column_names = ['game_id', 'game_settings']
-    game_settings = {'sentence': sentence, 
-                     'sentence_length': sentence_length, 
-                     'max_word_length': max_word_length, 
-                     'capitalized_words_count': capitalized_words_count, 
-                     'capitalized_letters_count_perc': capitalized_letters_count_perc, 
-                     'punctuation_word_count_perc': punctuation_word_count_perc, 
-                     'force_shift': force_shift,
-                     'hard_mode': hard_mode,
-                     'train_letters': train_letters,
-                     'player_name': player_name}
-    game_settings = [game_id, str(game_settings)]
-    df_game_settings = pd.DataFrame([game_settings], columns=column_names)
-    df_game_settings.to_sql('games_settings', con, if_exists='append', index=False)
-
-def clean_games_settings():
-    df = pd.read_sql_query('select * from games_settings', con)
-    df['game_settings'] = df['game_settings'].apply(lambda x: eval(x))
-    df_games_settings = pd.concat([df[['game_id']], df['game_settings'].apply(lambda x: pd.Series(x))], axis=1)
-    df_games_settings.to_sql('clean_games_settings', con, if_exists='append', index=False)
-
-def log_summary_per_game(): 
-    query = f"""
-        select
-            kp.game_id
-            , max(kp.time) - min(kp.time) game_duration
-            , sum(case when kp.correct_key = 1 then 1 else 0 end) keys_to_press
-            , count(*) keys_pressed
-            , round(CAST(sum(case when kp.correct_key = 1 then 1 else 0 end) as REAL) / count(*), 3) accuracy
-            , sum(case when kp.correct_key = 1 then 1 else 0 end) / ((max(kp.time) - min(kp.time)) / 60) / 5 wpm
-            , length(cgs.sentence) sentence_lentgh
-            , cgs.sentence	
-            , cgs.max_word_length	
-            , cgs.capitalized_words_count	
-            , cgs.capitalized_letters_count_perc	
-            , cgs.punctuation_word_count_perc	
-            , cgs.force_shift	
-            , cgs.hard_mode	
-            , cgs.train_letters	
-            , cgs.comment	player_name
-
-        from keys_pressed kp 
-        left join clean_games_settings cgs using(game_id)
-        where 1=1
-            and cgs.game_id is not null
-        group by 1
-        """
-
-        # query = 'select * from keys_pressed left join games_settings gs using(game_id)'
-
-    df_high_score = pd.read_sql_query(query, con)
-    df_high_score.to_sql('summary_per_game', con, if_exists='replace', index=False)
-
-
-def push_to_gbq():
-    df_keys_pressed = pd.read_sql_query('select * from keys_pressed', con)
-    df_keys_pressed.to_gbq('pyfasttype.keys_pressed', if_exists='replace', progress_bar=None)
-    df_clean_games_settings = pd.read_sql_query('select * from clean_games_settings', con)
-    df_clean_games_settings['capitalized_letters_count_perc'] = df_clean_games_settings['capitalized_letters_count_perc'].astype(str)
-    df_clean_games_settings.to_gbq('pyfasttype.clean_games_settings', if_exists='replace', progress_bar=None)
-    df_summary_per_game = pd.read_sql_query('select * from summary_per_game', con)
-    df_summary_per_game.to_gbq('pyfasttype.summary_per_game', if_exists='replace', progress_bar=None)
-    print('Data pushed to GBQ')
 
 
 
@@ -326,51 +285,6 @@ def next_key_pressed():
 
     return guess, 'right' if right_shift_pressed == True else ('left' if left_shift_pressed == True else None)
 
-
-def whats_bestscore (sort_by='score', condition=''):
-    query = f"""
-        with tbl1 as (
-        select
-            game_id
-            , max(time) - min(time) game_duration
-            , sum(case when correct_key = 1 then 1 else 0 end) keys_to_press
-            , count(*) keys_pressed
-            , round(CAST(sum(case when correct_key = 1 then 1 else 0 end) as REAL) / count(*), 3) accuracy
-            , sum(case when correct_key = 1 then 1 else 0 end) / ((max(time) - min(time)) / 60) / 5 wpm
-            , length(cgs.sentence) sentence_lentgh
-            , cgs.*
-
-        from keys_pressed
-        left join clean_games_settings cgs using(game_id)
-        where 1=1
-            {condition}
-            --and game_id = 3513153090
-        group by 1
-        )
-
-        select 
-            *
-        
-        from tbl1
-        where 1=1
-            and keys_pressed > 100
-            --wpm = (select max(wpm) from tbl1)
-        """
-
-    # query = 'select * from keys_pressed left join games_settings gs using(game_id)'
-
-    df_high_score = pd.read_sql_query(query, con)
-    df_high_score['score'] = (df_high_score['accuracy'] * df_high_score['wpm'].round(1) * df_high_score['sentence_lentgh']).round(0)
-    df_high_score = df_high_score.sort_values(sort_by, ascending=False).reset_index(drop=True)
-    best_player_name = df_high_score.loc[0, 'player_name']
-    best_hard_mode = df_high_score.loc[0, 'hard_mode']
-    best_game_duration = df_high_score.loc[0, 'game_duration']
-    best_keys_to_press = df_high_score.loc[0, 'keys_to_press']
-    best_keys_pressed = df_high_score.loc[0, 'keys_pressed']
-    best_accuracy = df_high_score.loc[0, 'accuracy']
-    best_wpm = df_high_score.loc[0, 'wpm']
-    best_score = df_high_score.round().loc[0, 'score']
-    return best_game_duration, best_keys_to_press, best_keys_pressed, best_accuracy, best_wpm, best_score, best_player_name, best_hard_mode
 
 
 def whats_avgscore():
@@ -415,7 +329,7 @@ def whats_avgscore():
 
     return avg_game_duration, avg_keys_to_press, avg_keys_pressed, avg_accuracy, avg_wpm, avg_score
 
-def first_game():
+def is_this_the_first_game():
     if pd.read_sql_query("SELECT name FROM sqlite_master WHERE type='table' AND name='keys_pressed';", con).shape[0] > 0:
         return False
     else:
@@ -430,7 +344,7 @@ def color_int(number: float, high_low_threshold = 0, prefix = '', suffix=''):
     return float_colored
 
 def score_game(key_pressed=None, game_id=None):
-    if key_pressed == None:
+    if game_id != None:
         df = pd.read_sql_query(f'select * from keys_typed where game_id = {game_id}', con)
     else:
         column_names = ['key', 'correct_key', 'time', 'game_id']
@@ -444,33 +358,47 @@ def score_game(key_pressed=None, game_id=None):
     wpm = round(keys_to_press / (game_duration / 60) / 5, 1)
     score = round(accuracy * wpm * len(sentence))
 
-    if first_game() == False:
-        best_game_duration, best_keys_to_press, best_keys_pressed, best_accuracy, best_wpm, best_score, best_player_name, best_hard_mode = whats_bestscore()
-        avg_game_duration, avg_keys_to_press, avg_keys_pressed, avg_accuracy, avg_wpm, avg_score = whats_avgscore()
 
-        if score >= best_score:
-            for _ in range(10):
-                print('RECORD\t'*10)
-            print(score >= best_score, '\n')
+
+    query = '''select distinct * from summary_per_game where keys_to_press > 100'''
+
+    df = pd.read_sql_query(query, con).describe().round()
+    df = df.loc[['mean', 'max'], :]
+    data = df.to_dict()
+
+    df = df.T
+
+    # df.insert(1, '')
+    df.loc['game_id', 'current_game'] = game_id
+    df.loc['maxdatetime_unix', 'current_game'] = first_second
+    df.loc['last_second', 'current_game'] = last_second
+    df.loc['keys_to_press', 'current_game'] = keys_to_press
+    df.loc['keys_pressed', 'current_game'] = keys_pressed
+    df.loc['accuracy', 'current_game'] = accuracy
+    df.loc['wpm', 'current_game'] = wpm
+    df.loc['score', 'current_game'] = score
+    # if is_this_the_first_game() == False:
+    #     best_game_duration, best_keys_to_press, best_keys_pressed, best_accuracy, best_wpm, best_score, best_player_name, best_hard_mode = whats_bestscore()
+    #     avg_game_duration, avg_keys_to_press, avg_keys_pressed, avg_accuracy, avg_wpm, avg_score = whats_avgscore()
+
+    #     if score >= best_score:
+    #         for _ in range(10):
+    #             print('RECORD\t'*10)
+    #         print(score >= best_score, '\n')
             
         
-        score_info_to_print =   f'Best hard mode:  {best_hard_mode}\n' +\
-                                f'Char to type:    {keys_to_press}   | {color_int((keys_to_press - best_keys_to_press) / best_keys_to_press * 100, 0, "%")}\t {avg_keys_to_press}   | {color_int((keys_to_press - avg_keys_to_press) / avg_keys_to_press * 100, 0, "%")}\n' +\
-                                f'Char typed:      {keys_pressed}   | {color_int((keys_pressed - best_keys_pressed) / best_keys_pressed * 100, 0, "%")}\t {avg_keys_pressed}   | {color_int((keys_pressed - avg_keys_pressed) / avg_keys_pressed * 100, 0, "%")}\n' +\
-                                f'Game duration:   {int(game_duration)}    | {color_int((game_duration - best_game_duration) / best_game_duration * 100, 0, "%")}\t {int(avg_game_duration)}    | {color_int((game_duration - best_game_duration) / best_game_duration * 100, 0, "%")}\n' +\
-                                f'Typing Accuracy: {accuracy:.1%} | {color_int((accuracy - best_accuracy) / best_accuracy * 100, 0, "%")}\t {avg_accuracy:.1%} | {color_int((accuracy - avg_accuracy) / avg_accuracy * 100, 0, "%")}\n' +\
-                                f'WPM:             {round(wpm)}    | {color_int((wpm - best_wpm) / best_wpm * 100, 0, "%")}\t {round(avg_wpm)}    | {color_int((wpm - avg_wpm) / avg_wpm * 100, 0, "%")}\n' +\
-                                f'Score:          {score}  | {color_int((score - best_score) / best_score * 100, 0, "%")}\t {avg_score}  | {color_int((score - avg_score) / avg_score * 100, 0, "%")}\n' +\
-                                f'Best player:     {best_player_name}\n '
+    #     score_info_to_print =   f'Best hard mode:  {best_hard_mode}\n' +\
+    #                             f'Char to type:    {keys_to_press}   | {color_int((keys_to_press - best_keys_to_press) / best_keys_to_press * 100, 0, "%")}\t {avg_keys_to_press}   | {color_int((keys_to_press - avg_keys_to_press) / avg_keys_to_press * 100, 0, "%")}\n' +\
+    #                             f'Char typed:      {keys_pressed}   | {color_int((keys_pressed - best_keys_pressed) / best_keys_pressed * 100, 0, "%")}\t {avg_keys_pressed}   | {color_int((keys_pressed - avg_keys_pressed) / avg_keys_pressed * 100, 0, "%")}\n' +\
+    #                             f'Game duration:   {int(game_duration)}    | {color_int((game_duration - best_game_duration) / best_game_duration * 100, 0, "%")}\t {int(avg_game_duration)}    | {color_int((game_duration - avg_game_duration) / avg_game_duration * 100, 0, "%")}\n' +\
+    #                             f'Typing Accuracy: {accuracy:.1%} | {color_int((accuracy - best_accuracy) / best_accuracy * 100, 0, "%")}\t {avg_accuracy:.1%} | {color_int((accuracy - avg_accuracy) / avg_accuracy * 100, 0, "%")}\n' +\
+    #                             f'WPM:             {round(wpm)}    | {color_int((wpm - best_wpm) / best_wpm * 100, 0, "%")}\t {round(avg_wpm)}    | {color_int((wpm - avg_wpm) / avg_wpm * 100, 0, "%")}\n' +\
+    #                             f'Score:           {score}  | {color_int((score - best_score) / best_score * 100, 0, "%")}\t {avg_score}  | {color_int((score - avg_score) / avg_score * 100, 0, "%")}\n' +\
+    #                             f'Best player:     {best_player_name}\n '
+    print(tabulate(df))
 
-        print(score_info_to_print)
-
-    else: 
-        print('Play one more game to see highscore and stats')
-
-
-
-
+    # else: 
+    #     print('Play one more game to see highscore and stats')
 
 
 def rule_force_shift(key_pressed, shift_pressed):
@@ -488,8 +416,8 @@ def rule_force_shift(key_pressed, shift_pressed):
 
 
 def info_to_print(sentence_to_display, char, key_pressed, best_wpm, avg_wpm):
-    if first_game() == False:
-        if len(key_pressed) > 1: 
+    if is_this_the_first_game() == False:
+        if len(key_pressed) > 1 and best_wpm > 0: 
             count_correct_keys = len(list(filter(lambda x: x[1] == True, key_pressed)))
             duration = key_pressed[-1][2] - key_pressed[0][2]
             wpm = count_correct_keys / duration * 60 / 5
@@ -514,19 +442,105 @@ def info_to_print(sentence_to_display, char, key_pressed, best_wpm, avg_wpm):
     return words_to_display
 
 
+
+
+
+class Score():
+    def __init__(self, game_settings): 
+        self.game = self.best_game()
+        self.game_settings = game_settings
+        # self.game_id = game_settings['game_id']
+        # self.word_count = game_settings['word_count']
+        # self.min_word_length = game_settings['min_word_length']
+        # self.max_word_length = game_settings['max_word_length']
+        # self.capitalized_words_count = game_settings['capitalized_words_count']
+        # self.capitalized_letters_count_perc = game_settings['capitalized_letters_count_perc']
+        # self.punctuation_word_count_perc = game_settings['punctuation_word_count_perc']
+        # self.force_shift = game_settings['force_shift']
+        # self.hard_mode = game_settings['hard_mode']
+        # self.train_letters = game_settings['train_letters']
+        # self.player_name = game_settings['player_name']
+
+        self.game_settings_query_condition = []
+        for key, value in self.game_settings.items():
+            # if key == 'game_id':
+            #     continue
+            if type(value) == str: 
+                condition = f'{key} == "{value}"'
+            else:
+                condition = f'{key} == {value}'
+                
+            self.game_settings_query_condition.append(condition)
+
+        
+        # self.query_game_condition = [f'train_letters == {int(self.train_letters)}', 
+        #                              f'hard_mode == {int(self.hard_mode)}', 
+        #                              f'word_count == {self.word_count}',
+        #                              f'']
+        # self.query_game_condition
     
-# sum(case when correct_key = 1 then 1 else 0 end) / ((max(time) - min(time)) / 60) / 5 wpm
+    
+    def best_game(self, sort_by='score', conditions=['1=1']):
+        '''Return the game settings of the best game based on the sorting'''
+        full_condition = ''.join([' AND ' + condition for condition in conditions])
+
+        query = f"""
+            SELECT 
+                * 
+            FROM summary_per_game
+            WHERE 1=1
+                AND keys_to_press > 100
+                {full_condition}
+            ORDER BY {sort_by}
+            """
+
+        df_summary = pd.read_sql_query(query, con)   
+        
+        # If there hasn't been any game played with the settings, catch the keyerror 
+        try:
+            best_game = df_summary.loc[0, :].to_dict()
+        except KeyError: 
+            best_game = {col: 0 for col in df_summary.columns}
+
+        return best_game
+
+    def make_condition(self):
+        '''Generate a string containing games settings that will act 
+        as condition for the mutliple queries'''
+
+        self.game_settings_query_condition = []
+        for key, value in self.game_settings:
+            if type(value) == str: 
+                condition = f'{key} == "{value}"'
+            else:
+                condition = f'{key} == {value}'
+                
+            self.game_settings_query_condition.append(condition)
+
+
+
+
+
+
 def main(): 
     global sentence
-    # Generating text to be typed
+
+    # Generating text, sentence or list of word to be typed
     sentence = pick_sentence()
+    game_settings['sentence'] = sentence
     # if query_to_type != None: 
     #     sentence = load_query(query_to_type, text_only=True)
-    #     print(sentence)
-    # game_settings = [sentence, sentence_length, max_word_length, game_id, capitalized_words_count, capitalized_letters_count_perc, punctuation_word_count_perc, force_shift]
-    sentence_length = len(sentence)
+    print(f'{sentence}')
 
-    best_wpm = whats_bestscore(sort_by='wpm')[4]
+    score = Score(game_settings)
+    score.game_settings = game_settings
+    for value in dir(score):
+        try: print(f'score.{value}', eval(f'score.{value}'))
+        except: ...
+
+    # best_score_condition = [f'train_letters == {train_letters}', f'hard_mode == {hard_mode}', f'word_count == {word_count}']
+    # best_score_condition = ''
+    best_wpm = score.best_game(sort_by='wpm desc')['wpm']
     avg_wpm = whats_avgscore()[4]
 
     
@@ -560,19 +574,6 @@ def main():
                 guess = rule_force_shift(guess, shift_pressed)
 
 
-
-
-
-   
-
-
-
-            # if index == sentence_length: # For last character of sentence only
-            #     log_game = True
-            #     guess = char
-            #     break
-
-            # print(guess, char, sentence[-1], index, sentence_length, guess == char, guess == 'return' and index == sentence_length)
             if guess == char: 
                 correct_key = True
                 key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
@@ -585,14 +586,12 @@ def main():
 
 
     score_game(key_pressed)
-    # if log_game == True:
     log_key_pressed(key_pressed=key_pressed)
-    log_game_settings()
+    log_game_settings(game_settings)
     clean_games_settings()
+    log_summary_per_game()
     push_to_gbq()
 
 
-
-
-
-main()
+if __name__ == '__main__':
+    main()
