@@ -1,45 +1,45 @@
-from itertools import count
-from turtle import pu
 import numpy as np
 import pygame
 import sqlite3
 import pandas as pd
-from tabulate import tabulate
+import shutil
 import time
 # from PyDictionary import PyDictionary
 import os
-from pyparsing import conditionAsParseAction
 from termcolor import colored
 
 from src.score import Score
 from src.log_data import *
 
+
+
+
 pd.set_option('display.float_format', lambda x: '%.2f' % x)
 pygame.init()
+database_path = "data/main_database.db"
+this_is_first_game = False if os.path.isfile(database_path) else True
 con = sqlite3.connect("data/main_database.db")
 current_dir = os.getcwd()
-clean_games_settings()
-log_summary_per_game()
+
+if this_is_first_game:
+    clean_games_settings()
+    log_summary_per_game()
 
  
 
 
-
-
-
-
 # Game settings
 game_id = np.random.randint(10**10)
-word_count = 50 #np.random.randint(25, 40)
-min_word_length = 0
-max_word_length = 5
+word_count = 1 #np.random.randint(25, 40)
+min_word_length = 0 # min length of a word
+max_word_length = 1000 # max length of a word
 capitalized_words_count = 0 # Set a float between 0 and 1 for the percentage of word that will be generated with a/multiple random case letter
 capitalized_letters_count_perc = 0 # Set a float between 0 and 1 for the percentage of the letters of the word that will be capitalized. Set an integer for the nmumber or random case statement letters. 1 is all letters capitalized not 1 word. if 'first' then only first letter will be capitalized
 punctuation_word_count_perc = 0 # Same as above but for punctuation around the word
 force_shift = False # Force to type the right shift of the keyboard
-hard_mode = True # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed
-train_letters = True
-train_letters_easy_mode = True # true for this will proposed most optimal words to type fast and beat records
+hard_mode = False # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed
+train_letters = False 
+train_letters_easy_mode = False # true for this will proposed most optimal words to type fast and beat records
 player_name = 'marc'
 
 game_settings = {'game_id': game_id,
@@ -331,11 +331,6 @@ def whats_avgscore():
 
     return avg_game_duration, avg_keys_to_press, avg_keys_pressed, avg_accuracy, avg_wpm, avg_score
 
-def is_this_the_first_game():
-    if pd.read_sql_query("SELECT name FROM sqlite_master WHERE type='table' AND name='keys_pressed';", con).shape[0] > 0:
-        return False
-    else:
-        return True
 
 
 
@@ -373,21 +368,21 @@ def color_int(text, high_low_threshold = 0, spacing=0, prefix = '', suffix=''):
 
 def info_to_print(sentence_to_display, char, key_pressed, best_wpm, avg_wpm):
     best_accuracy = score.best_game('accuracy')['accuracy']
-    if is_this_the_first_game() == False:
+    if this_is_first_game == False:
         if len(key_pressed) > 1 and best_wpm > 0: 
             count_correct_keys = len(list(filter(lambda x: x[1] == True, key_pressed)))
             duration = key_pressed[-1][2] - key_pressed[0][2]
             wpm = count_correct_keys / duration * 60 / 5
 
 
-            wpm_var_best = color_int((wpm - best_wpm) / best_wpm * 100, 0, suffix="%")
-            wpm_diff_best = color_int(wpm - best_wpm)
-            wpm_var_avg = color_int((wpm - avg_wpm) / avg_wpm * 100, 0, suffix="%")
-            wpm_diff_avg = color_int(wpm - avg_wpm)
+            # wpm_var_best = color_int((wpm - best_wpm) / best_wpm * 100, 0, suffix="%")
+            # wpm_diff_best = color_int(wpm - best_wpm)
+            # wpm_var_avg = color_int((wpm - avg_wpm) / avg_wpm * 100, 0, suffix="%")
+            # wpm_diff_avg = color_int(wpm - avg_wpm)
             wpm_colored = color_int(wpm, best_wpm)
             acc_colored = color_int(count_correct_keys / len(key_pressed)*100, best_accuracy)
             print('\n'*20)
-            print(f'Next key to press: {char}\t\nAccuracy: {acc_colored}\nWPM: {wpm_colored}|{wpm_var_best}|{wpm_diff_best}\t{wpm_var_avg}|{wpm_diff_avg}\n')
+            print(f'Next key to press: {char}\t\nAccuracy: {acc_colored}\nWPM: {wpm_colored}\n')#|{wpm_var_best}|{wpm_diff_best}\t{wpm_var_avg}|{wpm_diff_avg}\n')
 
         else: 
             print('\n'*20)
@@ -526,7 +521,7 @@ class Score():
         df.loc['wpm', 'current_game'] = wpm
         df.loc['score', 'current_game'] = score
 
-        if is_this_the_first_game() == False:
+        if this_is_first_game == False:
             self.game_scores = game_duration, keys_to_press, accuracy, wpm, score
         #     best_game_duration, best_keys_to_press, best_keys_pressed, best_accuracy, best_wpm, best_score, best_player_name, best_hard_mode = whats_bestscore()
         #     avg_game_duration, avg_keys_to_press, avg_keys_pressed, avg_accuracy, avg_wpm, avg_score = whats_avgscore()
@@ -676,7 +671,7 @@ def main():
                 key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
 
 
-    # print('\n'*10, is_this_the_first_game())
+    # print('\n'*10, this_is_first_game)
     try:
         score.score_game(key_pressed)
         score.compare_game()
@@ -687,6 +682,8 @@ def main():
     
     if game_id % 7 == 0: 
         push_to_gbq()
+
+    shutil.copyfile('data/main_database.db', 'data/example_database.db')
 
 
 if __name__ == '__main__':
