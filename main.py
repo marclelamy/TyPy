@@ -1,3 +1,4 @@
+from itertools import count
 from turtle import pu
 import numpy as np
 import pygame
@@ -17,7 +18,8 @@ pd.set_option('display.float_format', lambda x: '%.2f' % x)
 pygame.init()
 con = sqlite3.connect("data/main_database.db")
 current_dir = os.getcwd()
-
+clean_games_settings()
+log_summary_per_game()
 
  
 
@@ -28,16 +30,16 @@ current_dir = os.getcwd()
 
 # Game settings
 game_id = np.random.randint(10**10)
-word_count = 25 #np.random.randint(25, 40)
-min_word_length = None
-max_word_length = None
+word_count = 50 #np.random.randint(25, 40)
+min_word_length = 0
+max_word_length = 5
 capitalized_words_count = 0 # Set a float between 0 and 1 for the percentage of word that will be generated with a/multiple random case letter
 capitalized_letters_count_perc = 0 # Set a float between 0 and 1 for the percentage of the letters of the word that will be capitalized. Set an integer for the nmumber or random case statement letters. 1 is all letters capitalized not 1 word. if 'first' then only first letter will be capitalized
 punctuation_word_count_perc = 0 # Same as above but for punctuation around the word
 force_shift = False # Force to type the right shift of the keyboard
-hard_mode = False # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed
-train_letters = False
-easy_mode = False 
+hard_mode = True # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed
+train_letters = True
+train_letters_easy_mode = True # true for this will proposed most optimal words to type fast and beat records
 player_name = 'marc'
 
 game_settings = {'game_id': game_id,
@@ -50,6 +52,7 @@ game_settings = {'game_id': game_id,
                 'force_shift': force_shift,
                 'hard_mode': hard_mode,
                 'train_letters': train_letters,
+                'train_letters_easy_mode': train_letters_easy_mode,
                 'player_name': player_name}
 
 
@@ -73,7 +76,7 @@ def load_words() -> list:
     with open(file_path) as file: 
         all_words = file.read().split('\n')
 
-    lowered_words = [''.join([char for char in word if char.isalpha()]).lower() for word in all_words]
+    lowered_words = [''.join([char for char in word if char.isalpha()]).lower() for word in all_words if max_word_length == None or min_word_length <= len(word) <= max_word_length]
     return lowered_words
        
 
@@ -160,7 +163,7 @@ def get_n_slowest_words(word_count: list) -> list:
     df_words = df_words[df_words['word'].isin(done_words) == False]
 
     # Sort dataframe and pick the top 25 words with at least four letters
-    top_n = df_words.sort_values('avg_letter_score', ascending=easy_mode).query('word.str.len() > 4').iloc[:word_count, 0]
+    top_n = df_words.sort_values('avg_letter_score', ascending=train_letters_easy_mode).query('word.str.len() > 4').iloc[:word_count, 0]
     return list(top_n)
 
 
@@ -232,7 +235,7 @@ def pick_sentence():
         done_words = query_n_past_games_words(-1)
         word_list = load_words()
         pickable_words = set(word_list).difference(set(done_words))
-        pickable_words = [word for word in list(pickable_words) if max_word_length == None or min_word_length <= len(word) <= max_word_length]
+        pickable_words = [word for word in list(pickable_words)]
         np.random.shuffle(pickable_words)
         sentence = pickable_words[:word_count]
         print(sentence)
@@ -369,6 +372,7 @@ def color_int(text, high_low_threshold = 0, spacing=0, prefix = '', suffix=''):
 
 
 def info_to_print(sentence_to_display, char, key_pressed, best_wpm, avg_wpm):
+    best_accuracy = score.best_game('accuracy')['accuracy']
     if is_this_the_first_game() == False:
         if len(key_pressed) > 1 and best_wpm > 0: 
             count_correct_keys = len(list(filter(lambda x: x[1] == True, key_pressed)))
@@ -381,8 +385,9 @@ def info_to_print(sentence_to_display, char, key_pressed, best_wpm, avg_wpm):
             wpm_var_avg = color_int((wpm - avg_wpm) / avg_wpm * 100, 0, suffix="%")
             wpm_diff_avg = color_int(wpm - avg_wpm)
             wpm_colored = color_int(wpm, best_wpm)
+            acc_colored = color_int(count_correct_keys / len(key_pressed)*100, best_accuracy)
             print('\n'*20)
-            print(f'Next key to press: {char}\t\nWPM: {wpm_colored}|{wpm_var_best}|{wpm_diff_best}\t{wpm_var_avg}|{wpm_diff_avg}\n')
+            print(f'Next key to press: {char}\t\nAccuracy: {acc_colored}\nWPM: {wpm_colored}|{wpm_var_best}|{wpm_diff_best}\t{wpm_var_avg}|{wpm_diff_avg}\n')
 
         else: 
             print('\n'*20)
@@ -571,7 +576,7 @@ class Score():
                 # else:
                 #     text_to_print += get_correct_size_string(value, 10) + '\t'
                 if index2 == 0:
-                    text_to_print += get_correct_size_string(str(value), 15) + '\t'
+                    text_to_print += get_correct_size_string(str(value), 20) + '\t'
 
                 elif index1 == 0 and index2 in (4, 5):
                     text_to_print += get_correct_size_string(str(value), 10) + '\t'
@@ -609,6 +614,7 @@ class Score():
 
 def main(): 
     global sentence
+    global score
 
     # Generating text, sentence or list of word to be typed
     sentence = pick_sentence()
@@ -670,14 +676,17 @@ def main():
                 key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
 
 
-    print('\n'*10)
-    score.score_game(key_pressed)
-    score.compare_game()
+    # print('\n'*10, is_this_the_first_game())
+    try:
+        score.score_game(key_pressed)
+        score.compare_game()
+    except: 
+        ...
     log_key_pressed(key_pressed=key_pressed)
     log_game_settings(game_settings)
-    clean_games_settings()
-    log_summary_per_game()
-    # push_to_gbq()
+    
+    if game_id % 7 == 0: 
+        push_to_gbq()
 
 
 if __name__ == '__main__':
