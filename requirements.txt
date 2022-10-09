@@ -1,0 +1,5 @@
+numpy
+pygame
+sqlite3
+pandas
+termcolor 
