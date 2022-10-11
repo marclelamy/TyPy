@@ -15,7 +15,7 @@ import pandas as pd
 
 pd.set_option('display.float_format', lambda x: '%.2f' % x)
 # pygame.init()
-con = sqlite3.connect("main_database.db")
+con = sqlite3.connect("data/main_database.db")
 # current_dir = os.getcwd()
 
 
@@ -53,24 +53,27 @@ def log_summary_per_game():
             kp.game_id
             , max(kp.time) maxdatetime_unix
             , min(kp.time) mindatetime_unix
-            , max(kp.time) - min(kp.time) game_duration
-            , sum(case when kp.correct_key = 1 then 1 else 0 end) keys_to_press
-            , count(*) keys_pressed
-            , round(CAST(sum(case when kp.correct_key = 1 then 1 else 0 end) as REAL) / count(*), 3) accuracy
-            , sum(case when kp.correct_key = 1 then 1 else 0 end) / ((max(kp.time) - min(kp.time)) / 60) / 5 wpm
-            , length(cgs.sentence) sentence_length
-            , length(cgs.sentence) * (sum(case when kp.correct_key = 1 then 1 else 0 end) / ((max(kp.time) - min(kp.time)) / 60) / 5) * round(CAST(sum(case when kp.correct_key = 1 then 1 else 0 end) as REAL) / count(*), 3) score
+            , datetime(max(kp.time), 'unixepoch', 'localtime') as date_time
+            , max(kp.time) - min(kp.time) as game_duration
+            , sum(case when kp.correct_key = 1 then 1 else 0 end) as keys_to_press
+            , count(*) as keys_pressed
+            , round(CAST(sum(case when kp.correct_key = 1 then 1 else 0 end) as REAL) / count(*), 3) as accuracy
+            , sum(case when kp.correct_key = 1 then 1 else 0 end) / ((max(kp.time) - min(kp.time)) / 60) / 5 as wpm
+            , length(cgs.sentence) as sentence_length
+            , length(cgs.sentence) * (sum(case when kp.correct_key = 1 then 1 else 0 end) / ((max(kp.time) - min(kp.time)) / 60) / 5) * round(CAST(sum(case when kp.correct_key = 1 then 1 else 0 end) as REAL) / count(*), 3) as score
             , cgs.sentence
             , cgs.word_count
-            , cgs.max_word_length	
-            , cgs.capitalized_words_count	
-            , cgs.capitalized_letters_count_perc	
-            , cgs.punctuation_word_count_perc	
-            , cgs.force_shift	
-            , cgs.hard_mode	
-            , cgs.train_letters	
+            , coalesce(cgs.max_word_length, 1000)
+            , coalesce(cgs.min_word_length, 0) 
+            , coalesce(cgs.capitalized_words_count, 0)
+            , coalesce(cgs.capitalized_letters_count_perc, 0)
+            , coalesce(cgs.punctuation_word_count_perc, 0)
+            , coalesce(cgs.force_shift, False)	
+            , coalesce(cgs.hard_mode, False)
+            , coalesce(cgs.train_letters, False)
             , cgs.comment	
-            , LOWER(cgs.player_name)
+            , coalesce(cgs.train_letters_easy_mode, False) as train_letters_easy_mode
+            , LOWER(cgs.player_name) 
 
         from keys_pressed kp 
         left join clean_games_settings cgs using(game_id)
@@ -80,6 +83,17 @@ def log_summary_per_game():
         """
 
     df_high_score = pd.read_sql_query(query, con)
+
+    #idk why the columns dont fet renames 
+    df_high_score = df_high_score.rename({'coalesce(cgs.max_word_length, 1000)': 'max_word_length',
+                                          'coalesce(cgs.min_word_length, 0)': 'min_word_length',
+                                          'LOWER(cgs.player_name)': 'player_name',
+                                          'coalesce(cgs.force_shift, False)': 'force_shift',
+                                          'coalesce(cgs.train_letters, False)': 'train_letters',
+                                          'coalesce(cgs.capitalized_words_count, 0)': 'capitalized_words_count',
+                                          'coalesce(cgs.capitalized_letters_count_perc, 0)': 'capitalized_letters_count_perc',
+                                          'coalesce(cgs.punctuation_word_count_perc, 0)': 'punctuation_word_count_perc',
+                                          'coalesce(cgs.hard_mode, False)': 'hard_mode'}, axis=1)
     df_high_score.to_sql('summary_per_game', con, if_exists='replace', index=False)
 
 
@@ -91,6 +105,10 @@ def push_to_gbq():
     df_clean_games_settings = pd.read_sql_query('select * from clean_games_settings', con)
     df_clean_games_settings['capitalized_letters_count_perc'] = df_clean_games_settings['capitalized_letters_count_perc'].astype(str)
     df_clean_games_settings.to_gbq('pyfasttype.clean_games_settings', if_exists='replace', progress_bar=None)
-    # df_summary_per_game = pd.read_sql_query('select * from summary_per_game', con)
-    # df_summary_per_game.to_gbq('pyfasttype.summary_per_game', if_exists='replace', progress_bar=None)
+    df_summary_per_game = pd.read_sql_query('select * from summary_per_game', con)
+    df_summary_per_game.to_gbq('pyfasttype.summary_per_game', if_exists='replace', progress_bar=None)
     print('Data pushed to GBQ')
+
+log_summary_per_game()
+# print(pd.read_sql_query('select * from summary_per_game', con).columns)
+push_to_gbq()
