@@ -1,22 +1,7 @@
-# from turtle import pu
-# import numpy as np
-# import pygame
 import sqlite3
 import pandas as pd
-# from tabulate import tabulate
-# import time
-# # from PyDictionary import PyDictionary
-# import os
-# from pyparsing import conditionAsParseAction
-# from termcolor import colored
 
-# from src.score import Score
-# from src.log_data import *
-
-pd.set_option('display.float_format', lambda x: '%.2f' % x)
-# pygame.init()
 con = sqlite3.connect("data/main_database.db")
-# current_dir = os.getcwd()
 
 
 
@@ -42,7 +27,8 @@ def log_game_settings(game_settings):
 def clean_games_settings():
     df = pd.read_sql_query('select distinct * from games_settings', con)
     df['game_settings'] = df['game_settings'].apply(lambda x: eval(x))
-    df_games_settings = pd.concat([df[['game_id']], df['game_settings'].apply(lambda x: pd.Series(x))], axis=1)
+    df_games_settings = pd.concat([df[['game_id']], df['game_settings']\
+                          .apply(lambda x: pd.Series(x))], axis=1)
     df_games_settings.drop_duplicates().to_sql('clean_games_settings', con, if_exists='replace', index=False)
 
 
@@ -84,7 +70,7 @@ def log_summary_per_game():
 
     df_high_score = pd.read_sql_query(query, con)
 
-    #idk why the columns dont fet renames 
+    # Idk why but some columns can't have as new_col_name
     df_high_score = df_high_score.rename({'coalesce(cgs.max_word_length, 1000)': 'max_word_length',
                                           'coalesce(cgs.min_word_length, 0)': 'min_word_length',
                                           'LOWER(cgs.player_name)': 'player_name',
@@ -109,6 +95,17 @@ def push_to_gbq():
     df_summary_per_game.to_gbq('pyfasttype.summary_per_game', if_exists='replace', progress_bar=None)
     print('Data pushed to GBQ')
 
-log_summary_per_game()
-# print(pd.read_sql_query('select * from summary_per_game', con).columns)
-push_to_gbq()
+
+
+
+
+# clean_games_settings()
+# log_summary_per_game()
+
+
+# # print(pd.read_sql_query('select * from summary_per_game', con).columns)
+
+
+
+
+# push_to_gbq()

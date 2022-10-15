@@ -1,5 +1,5 @@
 ### About the project
-Game to make you type faster. By logging time at which is key is pressed, the game will adapt the proposed words to make you progress faster.
+Game to make you type faster. By logging time at which each key is pressed, the game will adapt the proposed words to make you progress based on your weakness.
 
 
 
@@ -9,7 +9,7 @@ Game to make you type faster. By logging time at which is key is pressed, the ga
 
 1. Open your terminal and go to the directory (fodler) you want to store the project
    ```sh
-   cd your/path/to/your/final/directory
+   cd your/favorite/directory/to/clone/cool/github/projects
    ```
 2. Clone the repo
    ```sh
