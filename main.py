@@ -360,7 +360,7 @@ def main():
 
     # Initialize the class with game settings
 
-    score = Score(game_settings)
+    score = Score(game_settings, con)
 
     # Generating text, sentence or list of word to be typed
     sentence = pick_sentence()
@@ -428,13 +428,13 @@ def main():
     score.score_game(key_pressed)
     if score.this_is_first_game == False:
         score.compare_game()
-    log_key_pressed(key_pressed=key_pressed)
+    log_key_pressed(key_pressed)
     log_game_settings(game_settings)
     
-    if game_id % 7777 == 0: 
+    if game_id % 7777777 == 0: 
         push_to_gbq()
 
-    shutil.copyfile('data/main_database.db', 'data/example_database.db')
+    shutil.copyfile('data/main_database_real.db', 'data/example_database.db')
 
 
 if __name__ == '__main__':

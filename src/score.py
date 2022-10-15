@@ -5,13 +5,13 @@ import sqlite3
 import os
 
 
-database_path = "data/main_database_test_for_errors_and_first_game.db"
-try: 
-    os.remove(database_path)
-except Exception as e:
-    print(e)
+# database_path = "data/main_database_real.db"
+# try: 
+#     os.remove(database_path)
+# except Exception as e:
+#     print(e)
 # this_is_first_game = False if os.path.isfile(database_path) else True
-con = sqlite3.connect(database_path)
+# con = sqlite3.connect(database_path)
 
 
 
@@ -63,8 +63,9 @@ game_settings = {'game_id': game_id,
 
 
 class Score():
-    def __init__(self, game_settings): 
+    def __init__(self, game_settings, con): 
         self.game_settings = game_settings
+        self.con = con
 
         self.game_settings_query_condition = []
         for key, value in self.game_settings.items():
@@ -117,7 +118,7 @@ class Score():
                 *
             FROM sqlite_master
             """
-        df_sqlite_master = pd.read_sql_query(query, con)
+        df_sqlite_master = pd.read_sql_query(query, self.con)
         
         if df_sqlite_master.shape[0] == 0:
             return True
@@ -140,7 +141,7 @@ class Score():
             ORDER BY {sort_by}
             """
 
-        df_summary = pd.read_sql_query(query, con)   
+        df_summary = pd.read_sql_query(query, self.con)   
         
         # If there hasn't been any game played with the settings, catch the keyerror 
         try:
@@ -169,7 +170,7 @@ class Score():
                 {full_condition}
             """
 
-        df_summary = pd.read_sql_query(query, con) 
+        df_summary = pd.read_sql_query(query, self.con) 
         try:
             df_summary = df_summary.describe().loc[['max', 'mean'], :].T
         except KeyError:
@@ -299,7 +300,7 @@ class Score():
 
 
 
-score = Score(game_settings)
+# score = Score(game_settings)
 # best_wpm = score.best_game(sort_by='wpm desc')['wpm']
 
 
