@@ -1,32 +1,8 @@
 import numpy as np
 import pandas as pd
 from termcolor import colored
-import sqlite3
-import os
+from src.display import get_correct_size_string, color_int
 
-
-# database_path = "data/main_database_real.db"
-# try: 
-#     os.remove(database_path)
-# except Exception as e:
-#     print(e)
-# this_is_first_game = False if os.path.isfile(database_path) else True
-# con = sqlite3.connect(database_path)
-
-
-
-def get_correct_size_string(string: str, lentgh: int) -> int: 
-    # print('get correct', string, type(string), lentgh, type(lentgh))
-    return string + ' ' * (lentgh - len(string))
-
-def color_int(text, high_low_threshold = 0, spacing=0, prefix = '', suffix=''):
-    # print('color_inta', text, type(text))
-    if text < high_low_threshold:
-        float_colored = colored(get_correct_size_string(prefix + str(round(text, 1)) + suffix, spacing), 'red')
-    else:
-        float_colored = colored(get_correct_size_string(prefix + str(round(text, 1)) + suffix, spacing), 'green')
-    
-    return float_colored
 
 
 
@@ -67,6 +43,7 @@ class Score():
         self.game_settings = game_settings
         self.con = con
 
+        # Create main condition 
         self.game_settings_query_condition = []
         for key, value in self.game_settings.items():
             if key not in ('word_count', 'min_word_length', 'max_word_length', 'capitalized_words_count', 'capitalized_letters_count_perc', 'punctuation_word_count_perc', 'force_shift', 'hard_mode', 'train_letters', 'train_letters_easy_mode'):
@@ -78,52 +55,44 @@ class Score():
                 
             self.game_settings_query_condition.append(condition)
 
+
         
-        
-        self.this_is_first_game = self.this_is_first_game()
-        
-        
-    def make_sure_all_tbl_exist(self):
-        # '''Makes sure the database contains all tables 
-        # for the code to run properly and doesn't have missing 
-        # tables, like for the first game.'''
-
-        # query = f"""
-        #     select * from sqlite_master
-        #     """
-        # df_sqlite_master = pd.read_sql_query(query, con)
-        # databse_existing_tables = df_sqlite_master['tbl_name'].to_list()
-
-        # if 'keys_pressed' not in databse_existing_tables:
-        #     df_keys_pressed = pd.DataFrame(columns=['key', 'correct_key', 'time', 'game_id', 'game_settings'])
-        #     df_keys_pressed.to_sql('keys_pressed', con, index=False)
-
-        # if 'games_settings' not in databse_existing_tables:
-        #     df_games_settings = pd.DataFrame(columns=['game_id', 'game_settings'])
-        #     df_games_settings.to_sql('games_settings', con, index=False)
-
-        # if 'clean_games_settings' not in databse_existing_tables:
-        #     df_clean_games_settings = pd.DataFrame(columns=['game_id', 'game_settings'])
-        #     df_clean_games_settings.to_sql('clean_games_settings', con, index=False)
-
-        ...
-
-
-    def this_is_first_game(self):
-        '''Check if there tables in the database. 
-        Returns True if none, False otherwise'''
-
-        query = f"""
-            SELECT 
-                *
-            FROM sqlite_master
-            """
-        df_sqlite_master = pd.read_sql_query(query, self.con)
+        # Check if a game has already been played by checking if there is any table in the master table
+        query_sqlite_master = f"""
+                SELECT 
+                    *
+                FROM sqlite_master
+                """
+        df_sqlite_master = pd.read_sql_query(query_sqlite_master, self.con)
         
         if df_sqlite_master.shape[0] == 0:
-            return True
+            self.this_is_first_game = True
+            self.this_is_first_game_with_current_settings = True
         else:
-            return False
+            self.this_is_first_game = False
+
+        # Check if a game has already been played with similar game settings
+        if self.this_is_first_game == False:
+            condition = ''.join([' AND ' + condition for condition in self.game_settings_query_condition])
+            query_summary = f"""
+                SELECT 
+                    game_duration
+                    , sentence_length
+                    , accuracy
+                    , wpm
+                    , score
+
+                FROM summary_per_game
+                WHERE 1=1
+                    {condition}
+                """
+
+            df_summary = pd.read_sql_query(query_summary, self.con) 
+            
+            if df_summary.shape[0] == 0:
+                self.this_is_first_game_with_current_settings = True
+            else:
+                self.this_is_first_game_with_current_settings = False
 
 
     
@@ -173,10 +142,32 @@ class Score():
         df_summary = pd.read_sql_query(query, self.con) 
         try:
             df_summary = df_summary.describe().loc[['max', 'mean'], :].T
-        except KeyError:
-            df_summary = {col: 0 for col in df_summary.columns}
+        except KeyError: # If first game with those game settings
+            df_summary = pd.DataFrame({'max': [0] * 5, 'mean': [0] * 5}, index=['game_duration', 'sentence_length', 'accuracy', 'wpm', 'score'])
 
         return df_summary
+
+    
+    def count_games(self, conditions=['1=1']):
+        '''Counts how many games have been played.
+        
+        Parameter
+        ---------
+        conditions list: list of condition to be passed in the query'''
+
+        full_condition = ''.join([' AND ' + condition for condition in conditions + self.game_settings_query_condition])
+
+        query = f"""
+            SELECT 
+                count(*)
+
+            FROM summary_per_game
+            WHERE 1=1
+                {full_condition}
+            """
+
+        game_count = pd.read_sql_query(query, self.con).shape[0]
+        return game_count
 
 
     def make_condition(self):
@@ -246,10 +237,10 @@ class Score():
         df_summary.insert(2, 'max_diff', max_diff)
         mean_diff = ((df_summary['game'] - df_summary['mean']) / df_summary['mean'] * 100).round()
         df_summary.insert(4, 'mean_diff', mean_diff)
-        df_summary = df_summary.reset_index().T.reset_index().T.replace('index', '')
+        df_summary = df_summary.reset_index().T.reset_index().T.replace('index', f'Games count: {self.count_games()}')
         # df_summary =.rename({'max': 'best', 'max_diff': 'best_diff'}, axis=1)
         # data_col_index = [[''] + list(df_summary.columns)] + [[df_summary.index[index]] + [value for value in row] for index, row in enumerate(data)]
-
+        
         text_to_print = ''
         for index1, row in enumerate(df_summary.to_numpy().tolist()):
             for index2, value in enumerate(row):
@@ -265,6 +256,9 @@ class Score():
                 #     text_to_print += get_correct_size_string(value, 10) + '\t'
                 if index2 == 0:
                     text_to_print += get_correct_size_string(str(value), 20) + '\t'
+
+                elif index1 == 3 and index2 in (1, 2):
+                    text_to_print += get_correct_size_string(str(value), 10) + '\t'
 
                 elif index1 == 0 and index2 in (4, 5):
                     text_to_print += get_correct_size_string(str(value), 10) + '\t'

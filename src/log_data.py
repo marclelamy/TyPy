@@ -3,7 +3,7 @@ import pandas as pd
 
 con = sqlite3.connect("data/main_database.db")
 
-
+  
 
 
 
@@ -57,7 +57,6 @@ def log_summary_per_game():
             , coalesce(cgs.force_shift, False)	
             , coalesce(cgs.hard_mode, False)
             , coalesce(cgs.train_letters, False)
-            , cgs.comment	
             , coalesce(cgs.train_letters_easy_mode, False) as train_letters_easy_mode
             , LOWER(cgs.player_name) 
 
@@ -85,15 +84,26 @@ def log_summary_per_game():
 
 
 
-def push_to_gbq():
-    df_keys_pressed = pd.read_sql_query('select * from keys_pressed', con)
-    df_keys_pressed.to_gbq('pyfasttype.keys_pressed', if_exists='replace', progress_bar=None)
-    df_clean_games_settings = pd.read_sql_query('select * from clean_games_settings', con)
-    df_clean_games_settings['capitalized_letters_count_perc'] = df_clean_games_settings['capitalized_letters_count_perc'].astype(str)
-    df_clean_games_settings.to_gbq('pyfasttype.clean_games_settings', if_exists='replace', progress_bar=None)
-    df_summary_per_game = pd.read_sql_query('select * from summary_per_game', con)
-    df_summary_per_game.to_gbq('pyfasttype.summary_per_game', if_exists='replace', progress_bar=None)
-    print('Data pushed to GBQ')
+def push_to_gbq(game_id):
+    '''Pushes the data about a specific game to BigQuery. 
+    For how to authenticate, see the Google Cloud doc https://cloud.google.com/bigquery/docs/authentication/
+    '''
+    try:
+        df_keys_pressed = pd.read_sql_query(f'select distinct * from keys_pressed', con)
+        df_clean_games_settings = pd.read_sql_query(f'select distinct * from clean_games_settings', con)
+        df_summary_per_game = pd.read_sql_query(f'select distinct * from summary_per_game', con)
+        df_clean_games_settings['capitalized_letters_count_perc'] = df_clean_games_settings['capitalized_letters_count_perc'].astype(str)
+        # print(df_clean_games_settings)
+        # print(pd.read_gbq('select * from pyfasttype.clean_games_settings'))
+        df_clean_games_settings.to_gbq('pyfasttype.clean_games_settings', if_exists='replace', progress_bar=None)
+        # print('clean_games_settings done')
+        df_keys_pressed.to_gbq('pyfasttype.keys_pressed', if_exists='replace', progress_bar=None)
+        # print('keys_pressed done')
+        df_summary_per_game.to_gbq('pyfasttype.summary_per_game', if_exists='replace', progress_bar=None)
+        print('Data pushed to GBQ')
+    
+    except Exception as error: 
+        print(error)
 
 
 

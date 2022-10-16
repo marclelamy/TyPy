@@ -1,7 +1,7 @@
 # https://datastudio.google.com/u/0/reporting/191d67ab-f6e7-43c6-bd99-37b3e4091ead/page/YJH4C/edit
 from turtle import left
 import numpy as np
-import pygame
+# import pygame
 import sqlite3
 import pandas as pd
 import shutil
@@ -12,12 +12,14 @@ from termcolor import colored
 
 from src.score import Score
 from src.log_data import *
+from src.detect_keys import *
+from src.display import *
 
 
 
 
 pd.set_option('display.float_format', lambda x: '%.2f' % x)
-pygame.init()
+# pygame.init()
 con = sqlite3.connect("data/main_database.db")
 current_dir = os.getcwd()
 
@@ -28,18 +30,18 @@ current_dir = os.getcwd()
 
 # Game settings
 game_id = np.random.randint(10**10)
-word_count = 5  #np.random.randint(25, 40)
+word_count = 1 #np.random.randint(25, 40)
 min_word_length = 0 # min length of a word
 max_word_length = 1000 # max length of a word
 capitalized_words_count = 0 # Set a float between 0 and 1 for the percentage of word that will be generated with a/multiple random case letter
 capitalized_letters_count_perc = 0 # Set a float between 0 and 1 for the percentage of the letters of the word that will be capitalized. Set an integer for the nmumber or random case statement letters. 1 is all letters capitalized not 1 word. if 'first' then only first letter will be capitalized
 punctuation_word_count_perc = 0 # Same as above but for punctuation around the word
 force_shift = False # Force to type the right shift of the keyboard
-hard_mode = False # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed
+hard_mode = -1 # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed. -1 is for top 10.000 most used 
 train_letters = False 
 train_letters_easy_mode = False # true for this will proposed most optimal words to type fast and beat records
 player_name = 'marc'
-
+ 
 game_settings = {'game_id': game_id,
                  'word_count': word_count, 
                  'min_word_length': min_word_length, 
@@ -68,8 +70,10 @@ def load_words() -> list:
 
     if hard_mode == True:
         file_path = f'{current_dir}/data/text/words.txt'
-    else: 
+    elif hard_mode == False:
         file_path = f'{current_dir}/data/text/common_words.txt'
+    else:
+        file_path = f'{current_dir}/data/text/google_most_used_words.txt'
         
     with open(file_path) as file: 
         all_words = file.read().split('\n')
@@ -110,6 +114,7 @@ def query_n_past_games_words(n_past_games: int) -> str:
     '''
 
     # If this is the first game, return empty list
+    print(f'{score.this_is_first_game=}')
     if score.this_is_first_game == True:
         return []
     elif n_past_games == -1: 
@@ -150,7 +155,7 @@ def get_n_slowest_words(word_count: list) -> list:
 
 
     # Load key score 
-    df_keytime = load_query('time_per_key_pressed')
+    df_keytime = load_query('time_per_bicombokey_pressed')
     key_score = dict(zip(df_keytime['following_key'], df_keytime['time_diff']))
 
     # Get score for each word
@@ -168,7 +173,6 @@ def get_n_slowest_words(word_count: list) -> list:
     # Sort dataframe and pick the top 25 words with at least four letters
     top_n = df_words.sort_values('avg_letter_score', ascending=train_letters_easy_mode).query('word.str.len() > 4').iloc[:word_count, 0]
     return list(top_n)
-
 
 
 def capitalize_random(sentence: list) -> list:
@@ -262,95 +266,8 @@ def pick_sentence():
 
 
 
-#########################
-# REWRITE THIS FUNCTION #
-#########################
-def next_key_pressed():
-
-    key_map_shift = {'`': '~', '1': '!', '2': '@', '3': '#', '4': '$', '5': '%', '6': '^', '7': '&', '8': '*', '9': '(', '0': ')', '-': '_', '=': '+', 'q': 'Q', 'w': 'W', 'e': 'E', 'r': 'R', 't': 'T', 'y': 'Y', 'u': 'U', 'i': 'I', 'o': 'O', 'p': 'P', '[': '{', ']': '}', "''": '|', 'a': 'A', 's': 'S', 'd': 'D', 'f': 'F', 'g': 'G', 'h': 'H', 'j': 'J', 'k': 'K', 'l': 'L', ';': ':', "'": '"', 'z': 'Z', 'x': 'X', 'c': 'C', 'v': 'V', 'b': 'B', 'n': 'N', 'm': 'M', ',': '<', '.': '>', '/': '?'}
-    key = None
-    count = 0
-    while key==None:
-        # Checking if any shift is pressed
-        mods = pygame.key.get_mods()
-        left_shift_pressed = True if mods and pygame.KMOD_LSHIFT else False
-        right_shift_pressed = True if mods and pygame.KMOD_RSHIFT else False
-        shift_pressed = True if True in (left_shift_pressed, right_shift_pressed) else False
-
-        for event in pygame.event.get():
-            if event.type == pygame.KEYDOWN:
-                guess = pygame.key.name(event.key)
-                
-                if shift_pressed and guess != 'space':
-                    guess = key_map_shift[guess] if shift_pressed is True else guess
-                    
-                key=guess
-                break
- 
-        count += 1
-
-    return guess, 'right' if right_shift_pressed == True else ('left' if left_shift_pressed == True else None)
 
 
-def rule_force_shift(key_pressed, shift_pressed):
-    right = '&*()_+|}{POIUYHJKL:"?><MNB'
-    left = '~!@#$%^QWERTGFDSAZXCVB'
-
-    if key_pressed in eval(shift_pressed):
-        print(key_pressed, shift_pressed)
-        print('WRONG SHIFT KEY', '\n'*2)
-        return ' '
-
-    else:
-        return key_pressed
-
-
-
-
-
-
-
-
-
-
-
-
-
-def get_correct_size_string(string: str, lentgh: int) -> int: 
-    # print('get correct', string, type(string), lentgh, type(lentgh))
-    return string + ' ' * (lentgh - len(string))
-
-def color_int(text, high_low_threshold = 0, spacing=0, prefix = '', suffix=''):
-    # print('color_inta', text, type(text))
-    if text < high_low_threshold:
-        float_colored = colored(get_correct_size_string(prefix + str(round(text, 1)) + suffix, spacing), 'red')
-    else:
-        float_colored = colored(get_correct_size_string(prefix + str(round(text, 1)) + suffix, spacing), 'green')
-    
-    return float_colored
-
-
-
-
-def info_to_print(sentence_to_display, char, key_pressed, best_wpm):
-    '''For every key pressed when playing the game, what is printed refreshed. 
-    This function is made for what's get printed and in which case'''
-    
-    if len(key_pressed) > 1: 
-        count_correct_keys = len(list(filter(lambda x: x[1] == True, key_pressed)))
-        duration = key_pressed[-1][2] - key_pressed[0][2]
-        wpm = count_correct_keys / duration * 60 / 5
-
-        wpm_colored = color_int(wpm, best_wpm)
-        print('\n'*20)
-        print(f'Next key: {char}\nWPM: {wpm_colored}\n')#|{wpm_var_best}|{wpm_diff_best}\t{wpm_var_avg}|{wpm_diff_avg}\n')
-
-    
-
-    words_to_display_count = 5
-    words_to_display = ' '.join(sentence_to_display.split(' ')[:words_to_display_count])
-    print(' ', words_to_display, '\t'*5, end='\r')
-    return words_to_display
 
 
 
@@ -367,18 +284,12 @@ def main():
     game_settings['sentence'] = sentence
     score.sentence = sentence
 
-    # if query_to_type != None: 
-    #     sentence = load_query(query_to_type, text_only=True)
     print(f'{sentence}')
 
-    if score.this_is_first_game:
+    if score.this_is_first_game or score.this_is_first_game_with_current_settings:
         best_wpm = 0
-        avg_wpm = 0
     else:
-        best_wpm = score.best_game(sort_by='wpm desc')['wpm']
-        avg_wpm = score.max_mean_score()['wpm']
-    print(best_wpm)
-    # print(sadjf)
+        best_wpm = score.max_mean_score().loc['wpm', 'max']
 
 
     
@@ -413,7 +324,7 @@ def main():
                 guess = rule_force_shift(guess, shift_pressed)
 
 
-            if guess == char: 
+            if guess == char:  
                 correct_key = True
                 key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
                 sentence_to_display = sentence_to_display[1:]
@@ -426,15 +337,17 @@ def main():
 
 
     score.score_game(key_pressed)
-    if score.this_is_first_game == False:
+    if score.this_is_first_game_with_current_settings == False:
         score.compare_game()
     log_key_pressed(key_pressed)
     log_game_settings(game_settings)
-    
-    if game_id % 7777777 == 0: 
-        push_to_gbq()
+    clean_games_settings()
+    log_summary_per_game()
 
-    shutil.copyfile('data/main_database_real.db', 'data/example_database.db')
+    print('Starting Push')
+    # push_to_gbq(game_id)
+
+    shutil.copyfile('data/main_database.db', 'data/example_database.db')
 
 
 if __name__ == '__main__':
