@@ -17,7 +17,6 @@ from src.display import *
 
 
 
-
 pd.set_option('display.float_format', lambda x: '%.2f' % x)
 # pygame.init()
 con = sqlite3.connect("data/main_database.db")
@@ -30,18 +29,18 @@ current_dir = os.getcwd()
 
 # Game settings
 game_id = np.random.randint(10**10)
-word_count = 1 #np.random.randint(25, 40)
-min_word_length = 0 # min length of a word
-max_word_length = 1000 # max length of a word
-capitalized_words_count = 0 # Set a float between 0 and 1 for the percentage of word that will be generated with a/multiple random case letter
-capitalized_letters_count_perc = 0 # Set a float between 0 and 1 for the percentage of the letters of the word that will be capitalized. Set an integer for the nmumber or random case statement letters. 1 is all letters capitalized not 1 word. if 'first' then only first letter will be capitalized
-punctuation_word_count_perc = 0 # Same as above but for punctuation around the word
-force_shift = False # Force to type the right shift of the keyboard
+word_count = 25 # How many words to be proposed in the game
+min_word_length = 4 # Minimum length of words
+max_word_length = 1000 # Maximum length of words
+capitalized_words_count = 0 # If int, count of words of word_count to have capitalized letter in it. If float, percentage of words of word_count to have capitalized letter in it
+capitalized_letters_count_perc = 0 # If int, numbers of letters in each word to be capitalized. If float, percentage of letters in each word to be capitalized. if 'first', capitalizes only the first letter of the words to be capitalized.
+punctuation_word_count_perc = 0 # Same as above, int for count, float for percentage. 
+force_shift = 0 # Force to type the right shift of the keyboard
 hard_mode = -1 # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed. -1 is for top 10.000 most used 
-train_letters = False 
-train_letters_easy_mode = False # true for this will proposed most optimal words to type fast and beat records
+train_letters = 0 
+train_letters_easy_mode = 0 # true for this will proposed most optimal words to type fast and beat records
 player_name = 'marc'
- 
+
 game_settings = {'game_id': game_id,
                  'word_count': word_count, 
                  'min_word_length': min_word_length, 
@@ -114,7 +113,6 @@ def query_n_past_games_words(n_past_games: int) -> str:
     '''
 
     # If this is the first game, return empty list
-    print(f'{score.this_is_first_game=}')
     if score.this_is_first_game == True:
         return []
     elif n_past_games == -1: 
@@ -132,6 +130,7 @@ def query_n_past_games_words(n_past_games: int) -> str:
         where 1=1
             and game_id > 100
             and sentence not null
+            and hard_mode = {hard_mode}
         group by 1
         order by 2 desc
         {limit_rows}
@@ -155,7 +154,7 @@ def get_n_slowest_words(word_count: list) -> list:
 
 
     # Load key score 
-    df_keytime = load_query('time_per_bicombokey_pressed')
+    df_keytime = load_query('time_per_key_pressed')
     key_score = dict(zip(df_keytime['following_key'], df_keytime['time_diff']))
 
     # Get score for each word
@@ -239,7 +238,7 @@ def pick_sentence():
     '''Based on the game settings, generates a list of words'''
 
     if train_letters == False:
-        done_words = query_n_past_games_words(20)
+        done_words = query_n_past_games_words(-1)
         word_list = load_words()
         pickable_words = set(word_list).difference(set(done_words))
         pickable_words = [word for word in list(pickable_words)]
@@ -276,7 +275,6 @@ def main():
     global score
 
     # Initialize the class with game settings
-
     score = Score(game_settings, con)
 
     # Generating text, sentence or list of word to be typed
@@ -318,6 +316,7 @@ def main():
         guess = '' 
         while guess != char:
             guess, shift_pressed = next_key_pressed()
+            # print('\n'*10, guess, shift_pressed, '\n'*10)
             # print(guess, shift_pressed)
 
             if force_shift == True and shift_pressed != None:
@@ -329,7 +328,7 @@ def main():
                 key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
                 sentence_to_display = sentence_to_display[1:]
                 break
-            else:
+            elif 'shift' not in guess: # That's because when you type shift a for A it logs shift and then shift + a
                 correct_key = False
                 print(guess, words_to_display)
                 key_pressed.append([str(guess), correct_key, time.time(), game_id]) 
@@ -337,6 +336,7 @@ def main():
 
 
     score.score_game(key_pressed)
+
     if score.this_is_first_game_with_current_settings == False:
         score.compare_game()
     log_key_pressed(key_pressed)
@@ -346,6 +346,9 @@ def main():
 
     print('Starting Push')
     # push_to_gbq(game_id)
+
+
+    print(f'Total distinct words typed: {len(query_n_past_games_words(-1))} | {len(query_n_past_games_words(-1))/len(load_words()):.1%}')
 
     shutil.copyfile('data/main_database.db', 'data/example_database.db')
 
