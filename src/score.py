@@ -227,7 +227,7 @@ class Score():
 
     def compare_game(self):
         df_summary = self.max_mean_score()
-        
+
         if type(df_summary) == dict: 
             print('Play another game to see the stats')
             return 
@@ -237,10 +237,12 @@ class Score():
         df_summary.insert(2, 'max_diff', max_diff)
         mean_diff = ((df_summary['game'] - df_summary['mean']) / df_summary['mean'] * 100).round()
         df_summary.insert(4, 'mean_diff', mean_diff)
-        df_summary = df_summary.reset_index().T.reset_index().T.replace('index', f'Games count: {self.count_games()}')
+        df_summary = df_summary.reset_index().T.reset_index().T.replace('index', '')
         # df_summary =.rename({'max': 'best', 'max_diff': 'best_diff'}, axis=1)
         # data_col_index = [[''] + list(df_summary.columns)] + [[df_summary.index[index]] + [value for value in row] for index, row in enumerate(data)]
-        
+        print(df_summary)
+        print(f'Games count: {self.count_games()}')
+        print(self.game_scores)
         text_to_print = ''
         for index1, row in enumerate(df_summary.to_numpy().tolist()):
             for index2, value in enumerate(row):
@@ -253,12 +255,13 @@ class Score():
                 #     value = round(value, 3)
                 #     text_to_print += color_int(value, 10) + '\t'
                 # else:
+# 
                 #     text_to_print += get_correct_size_string(value, 10) + '\t'
                 if index2 == 0:
                     text_to_print += get_correct_size_string(str(value), 20) + '\t'
 
                 elif index1 == 3 and index2 in (1, 2):
-                    text_to_print += get_correct_size_string(str(value), 10) + '\t'
+                    text_to_print += get_correct_size_string(str(round(value*100, 2)), 10) + '\t'
 
                 elif index1 == 0 and index2 in (4, 5):
                     text_to_print += get_correct_size_string(str(value), 10) + '\t'
@@ -266,6 +269,7 @@ class Score():
                 elif (index1 == 0 and index2 not in (4,6)) or index2 in (0, 1, 2, 4):
                     if type(value) in [int, float]:
                         value = round(value)
+
                     text_to_print += get_correct_size_string(str(value), 10) + '\t'
                 else:
                     # value = round(value, 3)
