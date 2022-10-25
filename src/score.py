@@ -159,7 +159,7 @@ class Score():
 
         query = f"""
             SELECT 
-                count(*)
+                *
 
             FROM summary_per_game
             WHERE 1=1
@@ -205,9 +205,9 @@ class Score():
         game_duration = round(last_second - first_second) if last_second - first_second > 10 else round(last_second - first_second, 2) # Don't round the seconds unless games of less than 10 second (for development only unless you're putting some lame ass rules)
         keys_pressed = df.shape[0]
         keys_to_press = df.query('correct_key == 1').shape[0]
-        accuracy = round(keys_to_press / keys_pressed, 2)
-        wpm = round(keys_to_press / (game_duration / 60) / 5, 1)
-        score = round(accuracy * wpm * len(self.sentence))
+        accuracy = keys_to_press / keys_pressed
+        wpm = keys_to_press / (game_duration / 60) / 5
+        score = accuracy * wpm * len(self.sentence)
 
 
 
@@ -233,16 +233,16 @@ class Score():
             return 
 
         df_summary.insert(0, 'game', self.game_scores)
-        max_diff = ((df_summary['game'] - df_summary['max']) / df_summary['max'] * 100).round()
+        max_diff = ((df_summary['game'] - df_summary['max']) / df_summary['max'] * 100).round(1)
         df_summary.insert(2, 'max_diff', max_diff)
-        mean_diff = ((df_summary['game'] - df_summary['mean']) / df_summary['mean'] * 100).round()
+        mean_diff = ((df_summary['game'] - df_summary['mean']) / df_summary['mean'] * 100).round(1)
         df_summary.insert(4, 'mean_diff', mean_diff)
         df_summary = df_summary.reset_index().T.reset_index().T.replace('index', '')
         # df_summary =.rename({'max': 'best', 'max_diff': 'best_diff'}, axis=1)
         # data_col_index = [[''] + list(df_summary.columns)] + [[df_summary.index[index]] + [value for value in row] for index, row in enumerate(data)]
-        print(df_summary)
+
         print(f'Games count: {self.count_games()}')
-        print(self.game_scores)
+
         text_to_print = ''
         for index1, row in enumerate(df_summary.to_numpy().tolist()):
             for index2, value in enumerate(row):
@@ -255,7 +255,6 @@ class Score():
                 #     value = round(value, 3)
                 #     text_to_print += color_int(value, 10) + '\t'
                 # else:
-# 
                 #     text_to_print += get_correct_size_string(value, 10) + '\t'
                 if index2 == 0:
                     text_to_print += get_correct_size_string(str(value), 20) + '\t'
@@ -273,7 +272,7 @@ class Score():
                     text_to_print += get_correct_size_string(str(value), 10) + '\t'
                 else:
                     # value = round(value, 3)
-                    text_to_print += color_int(value, spacing=10, suffix='%') + '\t'
+                    text_to_print += color_int(value, spacing=10, suffix=' %') + '\t'
                 # if index1 == 0 and index2 in (0, 1, 2, 5) or index2 == 0:
                 #     text_to_print += get_correct_size_string(str(value), 10) + '\t'
                 

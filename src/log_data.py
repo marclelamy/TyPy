@@ -84,7 +84,7 @@ def log_summary_per_game():
 
 
 
-def push_to_gbq(game_id):
+def push_to_gbq():
     '''Pushes the data about a specific game to BigQuery. 
     For how to authenticate, see the Google Cloud doc https://cloud.google.com/bigquery/docs/authentication/
     '''
@@ -103,14 +103,15 @@ def push_to_gbq(game_id):
         print('Data pushed to GBQ')
     
     except Exception as error: 
+        print("Error trying to push the data to GBQ. See errror below.")
         print(error)
 
 
 
 
 
-# clean_games_settings()
-# log_summary_per_game()
+clean_games_settings()
+log_summary_per_game()
 
 
 # # print(pd.read_sql_query('select * from summary_per_game', con).columns)

@@ -56,3 +56,5 @@ def rule_force_shift(key_pressed, shift_pressed):
 
     else:
         return key_pressed
+
+

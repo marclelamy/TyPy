@@ -1,14 +1,11 @@
 # https://datastudio.google.com/u/0/reporting/191d67ab-f6e7-43c6-bd99-37b3e4091ead/page/YJH4C/edit
 from turtle import left
 import numpy as np
-# import pygame
 import sqlite3
 import pandas as pd
 import shutil
 import time
-# from PyDictionary import PyDictionary
 import os
-from termcolor import colored
 
 from src.score import Score
 from src.log_data import *
@@ -17,8 +14,7 @@ from src.display import *
 
 
 
-pd.set_option('display.float_format', lambda x: '%.2f' % x)
-# pygame.init()
+
 con = sqlite3.connect("data/main_database.db")
 current_dir = os.getcwd()
 
@@ -33,11 +29,11 @@ word_count = 25 # How many words to be proposed in the game
 min_word_length = 4 # Minimum length of words
 max_word_length = 1000 # Maximum length of words
 capitalized_words_count = 0 # If int, count of words of word_count to have capitalized letter in it. If float, percentage of words of word_count to have capitalized letter in it
-capitalized_letters_count_perc = 0 # If int, numbers of letters in each word to be capitalized. If float, percentage of letters in each word to be capitalized. if 'first', capitalizes only the first letter of the words to be capitalized.
+capitalized_letters_count_perc = 'first' # If int, numbers of letters in each word to be capitalized. If float, percentage of letters in each word to be capitalized. if 'first', capitalizes only the first letter of the words to be capitalized.
 punctuation_word_count_perc = 0 # Same as above, int for count, float for percentage. 
 force_shift = 0 # Force to type the right shift of the keyboard
 hard_mode = -1 # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed. -1 is for top 10.000 most used 
-train_letters = 0 
+train_letters = 0
 train_letters_easy_mode = 0 # true for this will proposed most optimal words to type fast and beat records
 player_name = 'marc'
 
@@ -56,19 +52,23 @@ game_settings = {'game_id': game_id,
 
 
 
+# Game preference
+display_infos = False
+
 
 
 
 
 def load_words() -> list:
-    '''Opens one of two lists of words depending on the difficulty. 
-    Common_words.txt contains 3000 common words where words.txt contains 
-    about 450k words generally longer and harder to type compared to the 
-    common word list.
+    '''Opens one of three lists of words depending on the difficulty. 
+    common_words.txt contains 3000 common word
+    hard_words.txt contains 370k words words generally longer and harder 
+    to type compared to the common word 
+    google_most_used_words is the top 10k on Googe
     '''
 
     if hard_mode == True:
-        file_path = f'{current_dir}/data/text/words.txt'
+        file_path = f'{current_dir}/data/text/hard_words.txt'
     elif hard_mode == False:
         file_path = f'{current_dir}/data/text/common_words.txt'
     else:
@@ -137,7 +137,7 @@ def query_n_past_games_words(n_past_games: int) -> str:
         '''
 
     df_query = pd.read_sql_query(query_npast_games_words, con)
-    done_words = ' '.join(df_query['sentence']).split(' ')
+    done_words = ' '.join(df_query['sentence'].unique()).split(' ')
     return done_words
 
 
@@ -151,11 +151,14 @@ def get_n_slowest_words(word_count: list) -> list:
     ----------
     word_count int: numbers of worst words to return
     '''
-
+#################################################################################
+# NEED TO ADD A WEIGHT FOR LETTER FREQUENCY SO THAT NOT ONLY Z ARE BEING PROPOSED 
+#################################################################################
 
     # Load key score 
-    df_keytime = load_query('time_per_key_pressed')
-    key_score = dict(zip(df_keytime['following_key'], df_keytime['time_diff']))
+    df_keytime = load_query('time_per_bicombokey_pressed')
+    key_score = dict(zip(df_keytime['following_key'], df_keytime['time_diff'].round(4)))
+    print(key_score)
 
     # Get score for each word
     words = load_words()
@@ -173,7 +176,7 @@ def get_n_slowest_words(word_count: list) -> list:
     top_n = df_words.sort_values('avg_letter_score', ascending=train_letters_easy_mode).query('word.str.len() > 4').iloc[:word_count, 0]
     return list(top_n)
 
-
+# capitalized_words_count = 200
 def capitalize_random(sentence: list) -> list:
     '''Given a list of words, capitalized_words_count and 
     capitalized_letters_count_perc (terrible naming I know), 
@@ -183,27 +186,49 @@ def capitalize_random(sentence: list) -> list:
     ----------
     sentence list: list of words
     '''
-    capitalized_words_sentence_count = round(len(sentence) * capitalized_words_count)
+    sentence_length = len(sentence)
 
+    # print(capitalized_words_count)
+    # capitalized_words_count = capitalized_words_count if capitalized_words_count <= sentence_length else sentence_length
+
+    # setting the numbers of words to capitalize depending on int/float capitalized_words_count
+    if  0 < capitalized_words_count <= 1:
+        print(capitalized_words_count = 200)
+        capitalized_words_sentence_count = round(len(sentence) * capitalized_words_count)
+    elif type(capitalized_words_count) == int: 
+        capitalized_words_sentence_count = capitalized_words_count
+
+    # Looping through count of words to capitalize
     for index in range(capitalized_words_sentence_count):
-        word = sentence[index]
+        current_word = sentence[index]
 
         if type(capitalized_letters_count_perc) in [int, float]:
-            if capitalized_letters_count_perc <= 1:
-                capitalized_letters_sentence_count_perc = round(len(word) * capitalized_letters_count_perc)
+            if 0 < capitalized_letters_count_perc <= 1: 
+                capitalized_letters_sentence_count_perc = round(len(current_word) * capitalized_letters_count_perc)
 
-            rdm_list = list(range(len(word)))
-            np.random.shuffle(rdm_list)
-            rdm_list = rdm_list[:capitalized_letters_sentence_count_perc]
-            sentence[index] = ''.join([char.upper() if index_char in rdm_list else char for index_char, char in enumerate(word)])
+            # Generate a list of n numbers, suffle it and keep the indexes >= to the number of letters to cap
+            random_list = list(range(len(current_word)))
+            np.random.shuffle(random_list)
+            random_list = random_list[:capitalized_letters_sentence_count_perc]
+            sentence[index] = ''.join([char.upper() if index_char in random_list else char for index_char, char in enumerate(current_word)])
 
         elif capitalized_letters_count_perc == 'first':
-            sentence[index] = word.title()
+            sentence[index] = current_word.title()
 
     np.random.shuffle(sentence)
 
+
     return sentence
 
+
+
+# print('\n'*5)
+
+
+# sentence = 'hi my name is marc and i like to codeusingpython'.split(' ')
+# print(capitalize_random(sentence))
+# print('\n'*5)
+# jklja
 
 def add_punctuation (sentence: list):
     '''Given a list of word and punctuation_word_count_perc,
@@ -232,6 +257,7 @@ def add_punctuation (sentence: list):
     np.random.shuffle(sentence)
 
     return sentence
+
 
 
 def pick_sentence():
@@ -294,11 +320,13 @@ def main():
     # Looping through each character to compare them to the key pressed
     key_pressed = []
     sentence_to_display = sentence 
+    words_left_to_type = sentence.count(' ') + 1
     print('\n'*5)
     for index, char in enumerate(sentence_to_display):
         # Replacing space by spelled word space to match it to the key
         if char == ' ':
             char = 'space'
+            words_left_to_type -= 1
         elif char == '\n':
             char = 'return'
         elif char == '\t':
@@ -310,7 +338,7 @@ def main():
         #     print('No more letters, press ENTER to save the game, any other to not.')
         # else:      
 
-        words_to_display = info_to_print(sentence_to_display, char, key_pressed, best_wpm)
+        words_to_display = info_to_print(display_infos, sentence_to_display, char, key_pressed, best_wpm, words_left_to_type)
 
         # Looping through event key until the right key is pressed
         guess = '' 
@@ -345,7 +373,8 @@ def main():
     log_summary_per_game()
 
     print('Starting Push')
-    # push_to_gbq(game_id)
+    # if game_id % 7 == 0: 
+    #     push_to_gbq(game_id)
 
 
     print(f'Total distinct words typed: {len(query_n_past_games_words(-1))} | {len(query_n_past_games_words(-1))/len(load_words()):.1%}')
