@@ -49,16 +49,19 @@ def log_summary_per_game():
             , length(cgs.sentence) * (sum(case when kp.correct_key = 1 then 1 else 0 end) / ((max(kp.time) - min(kp.time)) / 60) / 5) * round(CAST(sum(case when kp.correct_key = 1 then 1 else 0 end) as REAL) / count(*), 3) as score
             , cgs.sentence
             , cgs.word_count
-            , coalesce(cgs.max_word_length, 1000)
-            , coalesce(cgs.min_word_length, 0) 
-            , coalesce(cgs.capitalized_words_count, 0)
-            , coalesce(cgs.capitalized_letters_count_perc, 0)
-            , coalesce(cgs.punctuation_word_count_perc, 0)
-            , coalesce(cgs.force_shift, False)	
-            , coalesce(cgs.hard_mode, False)
-            , coalesce(cgs.train_letters, False)
-            , coalesce(cgs.train_letters_easy_mode, False) as train_letters_easy_mode
-            , LOWER(cgs.player_name) 
+            , coalesce(cgs.max_word_length, 1000) as max_word_length
+            , coalesce(cgs.min_word_length, 0) as min_word_length
+            , coalesce(cgs.capitalized_words_count, 0) as capitalized_words_count
+            , coalesce(cgs.capitalized_letters_count_perc, 0) as capitalized_letters_count_perc
+            , coalesce(cgs.punctuation_word_count_perc, 0) as punctuation_word_count_perc
+            , coalesce(cgs.force_shift, 0) as force_shift
+            , coalesce(cgs.hard_mode, 0) as hard_mode
+            , coalesce(cgs.train_letters, 0) as train_letters
+            , case 
+                when cgs.train_letters in (null, 0) then 0
+                else coalesce(cgs.train_letters_easy_mode, 0)
+                end as train_letters_easy_mode
+            , LOWER(cgs.player_name) as player_name
 
         from keys_pressed kp 
         left join clean_games_settings cgs using(game_id)
@@ -68,50 +71,33 @@ def log_summary_per_game():
         """
 
     df_high_score = pd.read_sql_query(query, con)
-
-    # Idk why but some columns can't have as new_col_name
-    df_high_score = df_high_score.rename({'coalesce(cgs.max_word_length, 1000)': 'max_word_length',
-                                          'coalesce(cgs.min_word_length, 0)': 'min_word_length',
-                                          'LOWER(cgs.player_name)': 'player_name',
-                                          'coalesce(cgs.force_shift, False)': 'force_shift',
-                                          'coalesce(cgs.train_letters, False)': 'train_letters',
-                                          'coalesce(cgs.capitalized_words_count, 0)': 'capitalized_words_count',
-                                          'coalesce(cgs.capitalized_letters_count_perc, 0)': 'capitalized_letters_count_perc',
-                                          'coalesce(cgs.punctuation_word_count_perc, 0)': 'punctuation_word_count_perc',
-                                          'coalesce(cgs.hard_mode, False)': 'hard_mode'}, axis=1)
     df_high_score.to_sql('summary_per_game', con, if_exists='replace', index=False)
 
 
 
-
-def push_to_gbq():
+def push_to_gbq(game_id):
     '''Pushes the data about a specific game to BigQuery. 
     For how to authenticate, see the Google Cloud doc https://cloud.google.com/bigquery/docs/authentication/
     '''
-    try:
-        df_keys_pressed = pd.read_sql_query(f'select distinct * from keys_pressed', con)
-        df_clean_games_settings = pd.read_sql_query(f'select distinct * from clean_games_settings', con)
-        df_summary_per_game = pd.read_sql_query(f'select distinct * from summary_per_game', con)
-        df_clean_games_settings['capitalized_letters_count_perc'] = df_clean_games_settings['capitalized_letters_count_perc'].astype(str)
-        # print(df_clean_games_settings)
-        # print(pd.read_gbq('select * from pyfasttype.clean_games_settings'))
-        df_clean_games_settings.to_gbq('pyfasttype.clean_games_settings', if_exists='replace', progress_bar=None)
-        # print('clean_games_settings done')
-        df_keys_pressed.to_gbq('pyfasttype.keys_pressed', if_exists='replace', progress_bar=None)
-        # print('keys_pressed done')
-        df_summary_per_game.to_gbq('pyfasttype.summary_per_game', if_exists='replace', progress_bar=None)
-        print('Data pushed to GBQ')
-    
-    except Exception as error: 
-        print("Error trying to push the data to GBQ. See errror below.")
-        print(error)
+
+    # df_keys_pressed = pd.read_sql_query(f'select distinct * from keys_pressed', con)
+    # df_clean_games_settings = pd.read_sql_query(f'select distinct * from clean_games_settings', con)
+    df_summary_per_game = pd.read_sql_query(f'select distinct * from summary_per_game where game_id = {game_id}', con)
+    # df_clean_games_settings['capitalized_letters_count_perc'] = df_clean_games_settings['capitalized_letters_count_perc'].astype(str)
+    # print(df_clean_games_settings)
+    # print(pd.read_gbq('select * from pyfasttype.clean_games_settings'))
+    # df_clean_games_settings.to_gbq('pyfasttype.clean_games_settings', if_exists='replace', progress_bar=None)
+    # print('clean_games_settings done')
+    # df_keys_pressed.to_gbq('pyfasttype.keys_pressed', if_exists='replace', progress_bar=None)
+    # print('keys_pressed done')
+    df_summary_per_game.to_gbq('pyfasttype.summary_per_game', if_exists='append', progress_bar=None)
+    print('Data pushed to GBQ')
 
 
 
 
-
-clean_games_settings()
-log_summary_per_game()
+# clean_games_settings()
+# log_summary_per_game()
 
 
 # # print(pd.read_sql_query('select * from summary_per_game', con).columns)

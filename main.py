@@ -33,7 +33,7 @@ capitalized_letters_count_perc = 'first' # If int, numbers of letters in each wo
 punctuation_word_count_perc = 0 # Same as above, int for count, float for percentage. 
 force_shift = 0 # Force to type the right shift of the keyboard
 hard_mode = -1 # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed. -1 is for top 10.000 most used 
-train_letters = 0
+train_letters = 1
 train_letters_easy_mode = 0 # true for this will proposed most optimal words to type fast and beat records
 player_name = 'marc'
 
@@ -53,8 +53,8 @@ game_settings = {'game_id': game_id,
 
 
 # Game preference
-display_infos = False
-
+# display_infos = False
+display_infos = True
 
 
 
@@ -156,21 +156,29 @@ def get_n_slowest_words(word_count: list) -> list:
 #################################################################################
 
     # Load key score 
-    df_keytime = load_query('time_per_bicombokey_pressed')
+    df_keytime = load_query('time_per_key_pressed')
     key_score = dict(zip(df_keytime['following_key'], df_keytime['time_diff'].round(4)))
-    print(key_score)
+    # print(key_score)
 
     # Get score for each word
     words = load_words()
     df_words = pd.DataFrame(words, columns=['word'])
+
+    # all_words_letters = ''.join(df_words['word'])
+    # all_words_letters_count = {letter: all_words_letters.count(letter) for letter in set(all_words_letters)}
+    # all_words_letters_count = {key: -(value - min(all_words_letters_count.values()))/(max(all_words_letters_count.values()) - min(all_words_letters_count.values())) for key, value in all_words_letters_count.items()}
+    # key_score = {key: key_score[key] * all_words_letters_count[key] for key in all_words_letters_count.keys()}
+
     df_words['word_score'] = df_words['word'].apply(lambda word: sum([key_score[char] for char in word.lower().replace('-', '') if char in key_score.keys()]))
     df_words['avg_letter_score'] = df_words['word_score'] / df_words['word'].str.len()
+
 
     # Remove words done in the past 8 games
     done_words = query_n_past_games_words(8)
     # Remove non letter and space characters
     done_words = [''.join([char for char in word if char.isalpha() or char == ' ']) for word in done_words]
     df_words = df_words[df_words['word'].isin(done_words) == False]
+
 
     # Sort dataframe and pick the top 25 words with at least four letters
     top_n = df_words.sort_values('avg_letter_score', ascending=train_letters_easy_mode).query('word.str.len() > 4').iloc[:word_count, 0]
@@ -340,6 +348,7 @@ def main():
 
         words_to_display = info_to_print(display_infos, sentence_to_display, char, key_pressed, best_wpm, words_left_to_type)
 
+
         # Looping through event key until the right key is pressed
         guess = '' 
         while guess != char:
@@ -373,8 +382,12 @@ def main():
     log_summary_per_game()
 
     print('Starting Push')
-    # if game_id % 7 == 0: 
-    #     push_to_gbq(game_id)
+    # if game_id % 1 == 0: 
+    try:
+        push_to_gbq(game_id)
+    except Exception as error: 
+        print("Error trying to push the data to GBQ. See errror below.")
+        print(error)
 
 
     print(f'Total distinct words typed: {len(query_n_past_games_words(-1))} | {len(query_n_past_games_words(-1))/len(load_words()):.1%}')
