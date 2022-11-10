@@ -29,11 +29,11 @@ word_count = 25 # How many words to be proposed in the game
 min_word_length = 4 # Minimum length of words
 max_word_length = 1000 # Maximum length of words
 capitalized_words_count = 0 # If int, count of words of word_count to have capitalized letter in it. If float, percentage of words of word_count to have capitalized letter in it
-capitalized_letters_count_perc = 'first' # If int, numbers of letters in each word to be capitalized. If float, percentage of letters in each word to be capitalized. if 'first', capitalizes only the first letter of the words to be capitalized.
+capitalized_letters_count_perc = 0 # If int, numbers of letters in each word to be capitalized. If float, percentage of letters in each word to be capitalized. if 'first', capitalizes only the first letter of the words to be capitalized.
 punctuation_word_count_perc = 0 # Same as above, int for count, float for percentage. 
 force_shift = 0 # Force to type the right shift of the keyboard
 hard_mode = -1 # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed. -1 is for top 10.000 most used 
-train_letters = 1
+train_letters = 0
 train_letters_easy_mode = 0 # true for this will proposed most optimal words to type fast and beat records
 player_name = 'marc'
 
@@ -77,7 +77,10 @@ def load_words() -> list:
     with open(file_path) as file: 
         all_words = file.read().split('\n')
 
+    # Removing non letters characters and words g/l than max/min length
+    a = time.time()
     lowered_words = [''.join([char for char in word if char.isalpha()]).lower() for word in all_words if max_word_length == None or min_word_length <= len(word) <= max_word_length]
+    print(time.time() - a)
     return lowered_words
        
 
@@ -151,9 +154,6 @@ def get_n_slowest_words(word_count: list) -> list:
     ----------
     word_count int: numbers of worst words to return
     '''
-#################################################################################
-# NEED TO ADD A WEIGHT FOR LETTER FREQUENCY SO THAT NOT ONLY Z ARE BEING PROPOSED 
-#################################################################################
 
     # Load key score 
     df_keytime = load_query('time_per_key_pressed')
@@ -164,6 +164,7 @@ def get_n_slowest_words(word_count: list) -> list:
     words = load_words()
     df_words = pd.DataFrame(words, columns=['word'])
 
+    # This is supposed to add a weight so that not only least frequent letters are proposed but it's not woroking great
     # all_words_letters = ''.join(df_words['word'])
     # all_words_letters_count = {letter: all_words_letters.count(letter) for letter in set(all_words_letters)}
     # all_words_letters_count = {key: -(value - min(all_words_letters_count.values()))/(max(all_words_letters_count.values()) - min(all_words_letters_count.values())) for key, value in all_words_letters_count.items()}
@@ -381,19 +382,27 @@ def main():
     clean_games_settings()
     log_summary_per_game()
 
-    print('Starting Push')
-    # if game_id % 1 == 0: 
-    try:
-        push_to_gbq(game_id)
-    except Exception as error: 
-        print("Error trying to push the data to GBQ. See errror below.")
-        print(error)
+    # print('Starting Push')
+    if game_id % 7777777777 == 0: # Pushing data takes time so I do it every 7 games
+        try:
+            push_to_gbq(game_id)
+        except Exception as error: 
+            print("Error trying to push the data to GBQ. See errror below.")
+            print(error)
 
 
-    print(f'Total distinct words typed: {len(query_n_past_games_words(-1))} | {len(query_n_past_games_words(-1))/len(load_words()):.1%}')
+    # print(f'Total distinct words typed: {len(query_n_past_games_words(-1))} | {len(query_n_past_games_words(-1))/len(load_words()):.1%}')
 
     shutil.copyfile('data/main_database.db', 'data/example_database.db')
 
 
 if __name__ == '__main__':
-    main()
+    # for _ in range(10000):
+        # print(len('81.96 %            '))
+    main()  
+
+
+# a = '0                      '
+# b = '5.33 %              '
+
+# print(len(a), len(b))

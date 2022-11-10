@@ -4,16 +4,17 @@ from termcolor import colored
 
 
 
-def get_correct_size_string(string: str, lentgh: int) -> int: 
-    # print('get correct', string, type(string), lentgh, type(lentgh))
-    return string + ' ' * (lentgh - len(string))
+def get_correct_size_string(string: str, spacing: int) -> int: 
+    string = str(string)
+    s = string + ' ' * (spacing - len(string))
 
-def color_int(text, high_low_threshold = 0, spacing=0, prefix = '', suffix=''):
-    # print('color_inta', text, type(text))
-    if text < high_low_threshold:
-        float_colored = colored(get_correct_size_string(prefix + str(round(text, 3)) + suffix, spacing), 'red')
+    return s
+
+def color_int(text_to_print, threshold=0, spacing=0, prefix='', suffix=''):
+    if text_to_print < threshold:
+        float_colored = colored(get_correct_size_string(prefix + str(text_to_print) + suffix, spacing), 'red')
     else:
-        float_colored = colored(get_correct_size_string(prefix + str(round(text, 3)) + suffix, spacing), 'green')
+        float_colored = colored(get_correct_size_string(prefix + str(text_to_print) + suffix, spacing), 'green')
     
     return float_colored
 
@@ -28,7 +29,7 @@ def info_to_print(display_infos, sentence_to_display, char, key_pressed, best_wp
         duration = key_pressed[-1][2] - key_pressed[0][2]
         wpm = count_correct_keys / duration * 60 / 5
 
-        wpm_colored = color_int(wpm, best_wpm)
+        wpm_colored = color_int(round(wpm, 1), best_wpm)
         print('\n'*20)
         print(f'Words left to type: {words_left_to_type}\nWPM: {wpm_colored}\n')#|{wpm_var_best}|{wpm_diff_best}\t{wpm_var_avg}|{wpm_diff_avg}\n')
 

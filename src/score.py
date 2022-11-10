@@ -220,7 +220,7 @@ class Score():
                                     f'Chars typed:       {keys_pressed}\n' +\
                                     f'Typing Accuracy:   {accuracy:.1%}\n' +\
                                     f'WPM:               {round(wpm)}\n' +\
-                                    f'Score:             {score}\n'
+                                    f'Score:             {round(score)}\n'
             print(score_info_to_print)
             print('Play one more game to see highscores and stats comparison')
 
@@ -233,63 +233,35 @@ class Score():
             return 
 
         df_summary.insert(0, 'game', self.game_scores)
-        max_diff = ((df_summary['game'] - df_summary['max']) / df_summary['max'] * 100).round(1)
+        max_diff = ((df_summary['game'] - df_summary['max']) / df_summary['max'] * 100)
         df_summary.insert(2, 'max_diff', max_diff)
-        mean_diff = ((df_summary['game'] - df_summary['mean']) / df_summary['mean'] * 100).round(1)
+        mean_diff = ((df_summary['game'] - df_summary['mean']) / df_summary['mean'] * 100)
         df_summary.insert(4, 'mean_diff', mean_diff)
         df_summary = df_summary.reset_index().T.reset_index().T.replace('index', '')
         # df_summary =.rename({'max': 'best', 'max_diff': 'best_diff'}, axis=1)
         # data_col_index = [[''] + list(df_summary.columns)] + [[df_summary.index[index]] + [value for value in row] for index, row in enumerate(data)]
 
         print(f'Games count: {self.count_games()}')
-
         text_to_print = ''
-        for index1, row in enumerate(df_summary.to_numpy().tolist()):
-            for index2, value in enumerate(row):
-                # if index2 in (2, 4):
-                #     spacing = 9
-                # else: 
-                #     spacing = 15
-
-                # if type(value) in [int, float] or index2 not in (1, 3, 5):
-                #     value = round(value, 3)
-                #     text_to_print += color_int(value, 10) + '\t'
-                # else:
-                #     text_to_print += get_correct_size_string(value, 10) + '\t'
-                if index2 == 0:
-                    text_to_print += get_correct_size_string(str(value), 20) + '\t'
-
-                elif index1 == 3 and index2 in (1, 2):
-                    text_to_print += get_correct_size_string(str(round(value*100, 2)), 10) + '\t'
-
-                elif index1 == 0 and index2 in (4, 5):
-                    text_to_print += get_correct_size_string(str(value), 10) + '\t'
-
-                elif (index1 == 0 and index2 not in (4,6)) or index2 in (0, 1, 2, 4):
-                    if type(value) in [int, float]:
-                        value = round(value)
-
-                    text_to_print += get_correct_size_string(str(value), 10) + '\t'
-                else:
-                    # value = round(value, 3)
-                    text_to_print += color_int(value, spacing=10, suffix=' %') + '\t'
-                # if index1 == 0 and index2 in (0, 1, 2, 5) or index2 == 0:
-                #     text_to_print += get_correct_size_string(str(value), 10) + '\t'
+        for y, row in enumerate(df_summary.to_numpy().tolist()):
+            for x, value in enumerate(row):
+                if x == 0 or y == 0: # Columns and rows names
+                    value = value
+                    current_string = get_correct_size_string(value, 20)
                 
-                # elif index1 == 0 and index2 in (3, 4, 5):
-                #     text_to_print += get_correct_size_string(str(value), 10) + '\t'
-
-                # elif index1 == 3 and index2 == 1:
-                #     text_to_print += get_correct_size_string(value*100, spacing=10) + '\t'
-
-                # elif index1 == 3 and index2 in (1, 2, 4):
-                #     text_to_print += color_int(value*100, spacing=10) + '\t'
+                elif (y != 0 and x in (3, 5)): # _diff cols (variation %)
+                    value = round(value, 2)
+                    current_string = color_int(value, spacing=20, suffix=' %')
                 
-                # elif index1 == 3 and index2 in (3, 4, 5):
-                #     text_to_print += color_int(value, spacing=10) + '\t'
-                
+                elif y in (1, 2): # game duration and sentene length
+                    value = int(value)
+                    current_string = get_correct_size_string(int(value), 20)
 
+                elif y in (3,4): # Accuracy and wpm
+                    value = round(value, 2)
+                    current_string = get_correct_size_string(round(value, 2), 20)
 
+                text_to_print += current_string + '\t'
 
             text_to_print += '\n'
 

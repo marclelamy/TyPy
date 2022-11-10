@@ -15,7 +15,7 @@ Game to make you type faster. By logging time at which each key is pressed, the 
    ```sh
    git clone https://github.com/marclelamy/pyTypeFast.git
    ```
-3. Open directory and instal `requirements.txt`
+3. Open directory and install `requirements.txt`
    ```sh
    cd pyFasttype
    pip install -r requirements.txt
@@ -25,22 +25,24 @@ Game to make you type faster. By logging time at which each key is pressed, the 
 
 
 ## Usage
+Once you start the game, if you click on anything else or change app focus, the key detection won't detect anything else anymore. If it happens, restart the game.
 
+
+## Folder Structure
 <details>
-<summary>## Folder Structure</summary>
+<summary></summary>
+
+   .
+   ├── data                
+   │   ├── queries             # Queries to pull and analyze data from the database
+   │   └── text                # Text files used to propose words during the games
+
+   ├── src                     # Source files
+   │   ├── detect_keys.py              
+   │   ├── display.py              
+   │   ├── log_data.py             
+   │   ├── score.py            # 
+
+</details> 
 
 
-    .
-    ├── data                
-    │   ├── queries             # Queries to pull and analyze data from the database
-    │   └── text                # Text files used to propose words during the games
-
-    ├── src                     # Source files
-    │   ├── detect_keys.py              
-    │   ├── display.py              
-    │   ├── log_data.py             
-    │   ├── score.py            # Getting started guide
-
-
-
-</details>
