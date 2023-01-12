@@ -17,10 +17,13 @@ Game to make you type faster. By logging time at which each key is pressed, the 
    ```
 3. Open directory and install `requirements.txt`
    ```sh
-   cd pyFasttype
+   cd pyTypeFast
    pip install -r requirements.txt
    ```
-
+4. Play the game
+   ```sh
+   python3 main.py
+   ```
 
 
 
