@@ -25,7 +25,7 @@ current_dir = os.getcwd()
 
 # Game settings
 game_id = np.random.randint(10**10)
-word_count = 25 # How many words to be proposed in the game
+word_count = 15 # How many words to be proposed in the game
 min_word_length = 4 # Minimum length of words
 max_word_length = 1000 # Maximum length of words
 capitalized_words_count = 0 # If int, count of words of word_count to have capitalized letter in it. If float, percentage of words of word_count to have capitalized letter in it
