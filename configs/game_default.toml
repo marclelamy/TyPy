@@ -1,0 +1,14 @@
+[game_config]
+word_count = 1 # How many words to be proposed in the game
+word_length_min = 0 # Minimum length of words
+word_length_max = 1000 # Maximum length of words
+capitalized_words_count = 0 # If int, count of words of word_count to have capitalized letter in it. If float, percentage of words of word_count to have capitalized letter in it
+capitalized_letters_count_perc = 0 # If int, numbers of letters in each word to be capitalized. If float, percentage of letters in each word to be capitalized. if 'first', capitalizes only the first letter of the words to be capitalized.
+# For example:
+# sentence: hello my name is marc with .
+punctuation_word_count_perc = 0 # Same as above, int for count, float for percentage. 
+force_shift = 0 # Force to type the right shift of the keyboard
+hard_mode = 'Medium' # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed. -1 is for top 10.000 most used 
+train_letters = 0 
+train_letters_easy_mode = 0 # true for this will proposed most optimal words to type fast and beat records
+player_name = 'marc'
