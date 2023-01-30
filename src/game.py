@@ -6,21 +6,53 @@ import os
 from tabulate import tabulate
 import numpy as np
 from sentence import Sentence
+# from score import Score
 from termcolor import colored
 import re
 
 
 class Game(): 
     def __init__(self): 
-
-        print('\n'*20)
-        # self.game_settings = self.set_game_settings(config, kwargs)
-        self.con = sqlite3.connect("data/main_database.db")
-        self.available_config = [file.replace('.toml', '') for file in os.listdir('configs/')]
         self.game_id = np.random.randint(10**10)
+        self.create_db_if_doesnt_exists()
+        self.available_configs = [file.replace('.toml', '') for file in os.listdir('configs/')]
         self.cwd = os.getcwd()
         self.main_menu()
 
+
+    # def check_if_first_game(self): 
+    #     '''Check if a 
+    #     '''
+
+    #     if os.path.exists('data/main_database.db'): 
+    #         self.con = sqlite3.connect('data/main_database.db')
+    #     else: 
+    #         self.create_db()
+
+    def create_db_if_doesnt_exists(self): 
+        '''Create the two tables of the database
+        '''
+        self.con = sqlite3.connect('data/main_database.db')
+
+        keys_pressed = '''
+        CREATE TABLE IF NOT EXISTS keys_pressed (
+        key TEXT,
+        correct_key INTEGER,
+        shift_pressed TEXT,
+        time REAL,
+        game_id INTEGER,
+        game_settings TEXT
+        )'''
+
+        games_settings = '''
+        CREATE TABLE IF NOT EXISTS games_settings (
+        game_id INTEGER,
+        game_settings TEXT
+        )'''
+
+        for query in [keys_pressed, games_settings]: 
+            self.con.execute(query)
+        
 
 
     def main_menu(self): 
@@ -47,7 +79,7 @@ class Game():
         print('\n'*20)
 
         # Reads, sets and print default game confi
-        if 'user_default' in self.available_config:
+        if 'user_default' in self.available_configs:
             self.game_config = self.read_config('user_default')['game_config']
         else:
             self.game_config = self.read_config('game_default')['game_config']
@@ -65,8 +97,10 @@ class Game():
             self.quick_change_game_config()
         
         
-# I both need to propose a quick option with the index and new value and a menu with full table, range and everything
+
     def quick_change_game_config(self): 
+        '''Makes quick changes to rules using string pattern
+        '''
         print('Change rules using the index of the table above and using this format:')
         print('Separate the rule index and value by a space and each new rule with a coma.')
         print('<rule_index> <rule_value>, <rule_index>... Press enter to validate and start the game.\n')
@@ -82,6 +116,7 @@ class Game():
                 new_rules == new_rules[:-1]
                 key = ''
         
+
         # Set new rules
         for new_rule in new_rules.split(','): 
             new_rule, new_value = new_rule.strip().split(' ')
@@ -90,13 +125,6 @@ class Game():
 
 
         self.start_game()
-
-
-    def check_input_format(input_str):
-        pattern = "^q (\w+) (\w+),(\w+) (\w+)"
-        print(input_str)
-        match = re.match(pattern, input_str)
-        print('input check', input_str, match)
 
 
     def change_rule(self): 
@@ -134,17 +162,66 @@ class Game():
         self.print_game_config()
         print('Play game')
 
-        sentence = Sentence(self.game_config,
-                            self.cwd)
+        # Create sentence
+        self.sentence = Sentence(self.game_config, self.cwd).sentence
 
 
-        print(sentence.sentence)
+        # self.best_score = Score().best_scores(self.config) # best game for each of the rules or only for one? i think the best score for each of the rules. This function in Score() could calculate for each of the rules the best, avg (describe() type) and would return what would be in the dictionary/parameters of the function
+        self.key_pressed = []
+        sentence_to_display = self.sentence
+        for index, letter_to_type in enumerate(self.sentence):
+            if letter_to_type == ' ': 
+                letter_to_type = 'space'
+
+            
+            # Show infos 
+            # Find how to call the ui video games 
+            self.show_infos(
+                sentence_to_display,
+
+            )
+
+
+            # Check guess 
+            while True: 
+                guess, shift_pressed = dk.next_key_pressed()
+                correct_key = guess == letter_to_type
+
+
+                # check fo shift 
+                # if self.force_shift == True and 
+
+
+                if correct_key: 
+                    self.key_pressed.append([str(guess), correct_key, shift_pressed, time.time()]) 
+                    sentence_to_display = sentence_to_display[1:]
+                    break
+                else:
+                    self.key_pressed.append([str(guess), correct_key, shift_pressed, time.time()]) 
+
+            
 
 
 
 
 
-    def propose_menu(self, question: list, choices: list, wait_enter=False) -> int:
+
+
+
+
+    def show_infos(self, display_sentence): 
+        '''What to print during the game
+        '''
+        infos_to_print = ''
+
+        print(' '.join(display_sentence.split(' ')[:5]), end='\r')
+
+
+
+
+
+
+    def propose_menu(self, question: list, choices: list, nwait_enter=False) -> int:
         '''Print a new menu with question/answers with key pressed
         
         parameters 
