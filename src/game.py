@@ -6,7 +6,7 @@ import os
 from tabulate import tabulate
 import numpy as np
 from sentence import Sentence
-# from score import Score
+from score import Score
 from termcolor import colored
 import re
 
@@ -38,7 +38,7 @@ class Game():
         CREATE TABLE IF NOT EXISTS keys_pressed (
         key TEXT,
         correct_key INTEGER,
-        shift_pressed TEXT,
+        shift TEXT,
         time REAL,
         game_id INTEGER,
         game_settings TEXT
@@ -163,13 +163,13 @@ class Game():
         print('Play game')
 
         # Create sentence
-        self.sentence = Sentence(self.game_config, self.cwd).sentence
+        sentence = Sentence(self.game_config, self.cwd).sentence
 
-
+        score = Score(self.con)
         # self.best_score = Score().best_scores(self.config) # best game for each of the rules or only for one? i think the best score for each of the rules. This function in Score() could calculate for each of the rules the best, avg (describe() type) and would return what would be in the dictionary/parameters of the function
-        self.key_pressed = []
-        sentence_to_display = self.sentence
-        for index, letter_to_type in enumerate(self.sentence):
+        keys_pressed = []
+        sentence_to_display = sentence
+        for index, letter_to_type in enumerate(sentence):
             if letter_to_type == ' ': 
                 letter_to_type = 'space'
 
@@ -193,13 +193,22 @@ class Game():
 
 
                 if correct_key: 
-                    self.key_pressed.append([str(guess), correct_key, shift_pressed, time.time()]) 
+                    keys_pressed.append([str(guess), correct_key, shift_pressed, time.time(), self.game_id]) 
                     sentence_to_display = sentence_to_display[1:]
                     break
                 else:
-                    self.key_pressed.append([str(guess), correct_key, shift_pressed, time.time()]) 
+                    keys_pressed.append([str(guess), correct_key, shift_pressed, time.time(), self.game_id]) 
 
-            
+        
+
+        # Log game
+        game_data = self.game_config
+        game_data.update(
+            {'sentence': sentence,
+             'keys_pressed': keys_pressed,
+             'game_id': self.game_id}
+        )
+        score.log_game(game_data)
 
 
 
