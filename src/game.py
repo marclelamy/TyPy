@@ -9,25 +9,33 @@ from sentence import Sentence
 from score import Score
 from termcolor import colored
 import re
-
+import sys
 
 class Game(): 
     def __init__(self): 
         self.game_id = np.random.randint(10**10)
         self.create_db_if_doesnt_exists()
         self.available_configs = [file.replace('.toml', '') for file in os.listdir('configs/')]
+        self.score = Score(self.con)
         self.cwd = os.getcwd()
         self.main_menu()
 
 
-    # def check_if_first_game(self): 
-    #     '''Check if a 
-    #     '''
+    def check_if_first_game(self): 
+        '''Check if a 
+        '''
 
-    #     if os.path.exists('data/main_database.db'): 
-    #         self.con = sqlite3.connect('data/main_database.db')
-    #     else: 
-    #         self.create_db()
+        if os.path.exists('data/main_database.db'): 
+            self.con = sqlite3.connect('data/main_database.db')
+        else: 
+            self.create_db()
+
+
+        #########
+        # Set the name of the player name 
+            # N - set yout name 
+            # D - default (you become npc)
+        #########
 
     def create_db_if_doesnt_exists(self): 
         '''Create the two tables of the database
@@ -68,8 +76,6 @@ class Game():
             1: self.global_preference,
             2: self.leaderboard
         }[choice]()
-
-# from teh tabular, choose the row index to directly modify the rules
 
 
 
@@ -160,14 +166,14 @@ class Game():
 
     def start_game(self): 
         self.print_game_config()
-        print('Play game')
+        print('Play game', '\n'*20)
 
         # Create sentence
         sentence = Sentence(self.game_config, self.cwd).sentence
 
-        score = Score(self.con)
         # self.best_score = Score().best_scores(self.config) # best game for each of the rules or only for one? i think the best score for each of the rules. This function in Score() could calculate for each of the rules the best, avg (describe() type) and would return what would be in the dictionary/parameters of the function
         keys_pressed = []
+        correct_key_count, incorrect_key_count = 0, 0
         sentence_to_display = sentence
         for index, letter_to_type in enumerate(sentence):
             if letter_to_type == ' ': 
@@ -176,9 +182,11 @@ class Game():
             
             # Show infos 
             # Find how to call the ui video games 
-            self.show_infos(
+            self.hud(
                 sentence_to_display,
-
+                words_left = sentence_to_display.count(' '),
+                correct_key_count = correct_key_count,
+                keys_pressed = keys_pressed,
             )
 
 
@@ -186,21 +194,65 @@ class Game():
             while True: 
                 guess, shift_pressed = dk.next_key_pressed()
                 correct_key = guess == letter_to_type
-
+                keys_pressed.append([str(guess), correct_key, shift_pressed, time.time(), self.game_id]) 
 
                 # check fo shift 
                 # if self.force_shift == True and 
 
 
                 if correct_key: 
-                    keys_pressed.append([str(guess), correct_key, shift_pressed, time.time(), self.game_id]) 
                     sentence_to_display = sentence_to_display[1:]
+                    correct_key_count += 1
                     break
                 else:
                     keys_pressed.append([str(guess), correct_key, shift_pressed, time.time(), self.game_id]) 
+                    incorrect_key_count += 1
 
         
+        # End game
+        print(keys_pressed)
+        self.end_game(
+            sentence, 
+            keys_pressed
+        )
 
+
+
+    @staticmethod
+    def wpm(key_count, seconds): 
+        return key_count / seconds * 60 / 5
+    
+    @staticmethod
+    def print_multine_with_carriage(str): 
+        lines_count = str.count('\n') + 1
+        str = f"\x1B[{lines_count}A" + str.replace('\n', "\x1B[0K" + '\n')
+        print(str, flush=True)
+
+
+    def hud(self, display_sentence, words_left, correct_key_count, keys_pressed): 
+        '''What to print during the game
+        '''
+        infos_to_print = ''
+        infos_to_print += f'Words left to type: {words_left}\n'
+        if len(keys_pressed) > 1:
+            # print(keys_pressed[-1][3],  keys_pressed[0][3])
+            wpm = self.wpm(correct_key_count, keys_pressed[-1][3] - keys_pressed[0][3])
+            infos_to_print += f'WPM: {round(wpm, 1)}\n'
+
+
+        infos_to_print += ' ' + ' '.join(display_sentence.split(' ')[:5]) + ' ' * 20
+        # print(infos_to_print, '\t'*5, end='\r')
+        # print(repr(infos_to_print), '\n'*5)
+        self.print_multine_with_carriage(infos_to_print) # This adds a new line at the end
+        # sys.stdout.write(infos_to_print)
+        
+
+
+
+    def end_game(self, sentence, keys_pressed): 
+        '''What happens after the game completed the full sentence. 
+        the game data will always be saved then it's matter of user's
+        ''' 
         # Log game
         game_data = self.game_config
         game_data.update(
@@ -208,7 +260,13 @@ class Game():
              'keys_pressed': keys_pressed,
              'game_id': self.game_id}
         )
-        score.log_game(game_data)
+        self.score.log_game(game_data)
+        self.score.summarize_games_scores(self)
+        print(game_data)
+
+
+        # Propose to save on gbg, back to main menu, leaderboard
+    
 
 
 
@@ -218,12 +276,9 @@ class Game():
 
 
 
-    def show_infos(self, display_sentence): 
-        '''What to print during the game
-        '''
-        infos_to_print = ''
 
-        print(' '.join(display_sentence.split(' ')[:5]), end='\r')
+
+
 
 
 

@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
-from termcolor import colored
-from src.display import get_correct_size_string, color_int
-
+# from termcolor import colored
+# from src.display import get_correct_size_string, color_int
+# import sqlite3
 
 
 
@@ -36,241 +36,331 @@ game_settings = {'game_id': game_id,
 
 
 
-
-
-class Score():
-    def __init__(self, game_settings, con): 
-        self.game_settings = game_settings
+class Score(): 
+    def __init__(self, con):
         self.con = con
 
-        # Create main condition 
-        self.game_settings_query_condition = []
-        for key, value in self.game_settings.items():
-            if key not in ('word_count', 'min_word_length', 'max_word_length', 'capitalized_words_count', 'capitalized_letters_count_perc', 'punctuation_word_count_perc', 'force_shift', 'hard_mode', 'train_letters', 'train_letters_easy_mode'):
-                continue
-            if type(value) == str: 
-                condition = f'{key} == "{value}"'
-            else:
-                condition = f'{key} == {value}'
+    
+    def log_game(self, game_data): 
+        '''Save the data produced during the games
+        '''
+        # Saving keys
+        column_names = ['key', 'correct_key', 'shift', 'time', 'game_id']
+        # print(game_data)
+        # print(game_data['keys_pressed'])
+        df_keys = pd.DataFrame(game_data['keys_pressed'], columns=column_names)
+        df_keys.to_sql('keys_pressed', self.con, if_exists='append', index=False)
+
+        # Saving ame settings
+        column_names = ['game_id', 'game_settings']
+        # game_settings_lst = [game_settings['game_id'], str({key:value if key != 'game_id'game_settings})]
+        game_id = game_data['game_id']
+        del game_data['game_id']
+        del game_data['keys_pressed']
+        # print(game_data)
+        self.df_game_data = pd.DataFrame([[game_id, str(game_data)]], columns=column_names)
+        self.df_game_data.to_sql('games_settings', self.con, if_exists='append', index=False)
+
+        self.clean_games_settings()
+
+    def clean_games_settings(self):
+        '''Explodes the 
+        '''
+        df_games_settings = pd.read_sql_query('select distinct * from games_settings', self.con)
+        df_clean_games_settings = df_games_settings['game_settings'].apply(lambda x: pd.Series(eval(x)))
+        df_clean_games_settings.insert(0, 'game_id', df_games_settings['game_id'])
+        df_clean_games_settings.to_sql('clean_games_settings', self.con, if_exists='replace', index=False)
+    
+
+    def summarize_games_scores(self): 
+        query = f"""
+            select
+                distinct
+                kp.game_id
+                , max(kp.time) maxdatetime_unix
+                , min(kp.time) mindatetime_unix
+                , datetime(max(kp.time), 'unixepoch', 'localtime') as date_time
+                , max(kp.time) - min(kp.time) as game_duration
+                , sum(case when kp.correct_key = 1 then 1 else 0 end) as keys_to_press
+                , count(*) as keys_pressed
+                , round(CAST(sum(case when kp.correct_key = 1 then 1 else 0 end) as REAL) / count(*), 3) as accuracy
+                , sum(case when kp.correct_key = 1 then 1 else 0 end) / ((max(kp.time) - min(kp.time)) / 60) / 5 as wpm
+                , length(cgs.sentence) as sentence_length
+                , length(cgs.sentence) * (sum(case when kp.correct_key = 1 then 1 else 0 end) / ((max(kp.time) - min(kp.time)) / 60) / 5) * round(CAST(sum(case when kp.correct_key = 1 then 1 else 0 end) as REAL) / count(*), 3) as score
+                , cgs.sentence
+                , cgs.word_count
+                , coalesce(cgs.max_word_length, 1000) as max_word_length
+                , coalesce(cgs.min_word_length, 0) as min_word_length
+                , coalesce(cgs.capitalized_words_count, 0) as capitalized_words_count
+                , coalesce(cgs.capitalized_letters_count_perc, 0) as capitalized_letters_count_perc
+                , coalesce(cgs.punctuation_word_count_perc, 0) as punctuation_word_count_perc
+                , coalesce(cgs.force_shift, 0) as force_shift
+                , coalesce(cgs.hard_mode, 0) as hard_mode
+                , coalesce(cgs.train_letters, 0) as train_letters
+                , case 
+                    when cgs.train_letters in (null, 0) then 0
+                    else coalesce(cgs.train_letters_easy_mode, 0)
+                    end as train_letters_easy_mode
+                , LOWER(cgs.player_name) as player_name
+
+            from keys_pressed kp 
+            left join clean_games_settings cgs using(game_id)
+            where 1=1
+            group by 1
+            order by maxdatetime_unix asc
+            """
+
+        df_high_score = pd.read_sql_query(query, self.con)
+        df_high_score.to_sql('summary_per_game', self.con, if_exists='replace', index=False)
+        print('Summarize games')
+
+
+    
+
+    def summaryze_rules(): 
+        print('Summary rules')
+
+
+
+
+
+
+
+
+
+# class Score():
+#     def __init__(self, game_settings, con): 
+#         self.game_settings = game_settings
+#         self.con = con
+
+#         # Create main condition 
+#         self.game_settings_query_condition = []
+#         for key, value in self.game_settings.items():
+#             if key not in ('word_count', 'min_word_length', 'max_word_length', 'capitalized_words_count', 'capitalized_letters_count_perc', 'punctuation_word_count_perc', 'force_shift', 'hard_mode', 'train_letters', 'train_letters_easy_mode'):
+#                 continue
+#             if type(value) == str: 
+#                 condition = f'{key} == "{value}"'
+#             else:
+#                 condition = f'{key} == {value}'
                 
-            self.game_settings_query_condition.append(condition)
+#             self.game_settings_query_condition.append(condition)
 
 
         
-        # Check if a game has already been played by checking if there is any table in the master table
-        query_sqlite_master = f"""
-                SELECT 
-                    *
-                FROM sqlite_master
-                """
-        df_sqlite_master = pd.read_sql_query(query_sqlite_master, self.con)
+#         # Check if a game has already been played by checking if there is any table in the master table
+#         query_sqlite_master = f"""
+#                 SELECT 
+#                     *
+#                 FROM sqlite_master
+#                 """
+#         df_sqlite_master = pd.read_sql_query(query_sqlite_master, self.con)
         
-        if df_sqlite_master.shape[0] == 0:
-            self.this_is_first_game = True
-            self.this_is_first_game_with_current_settings = True
-        else:
-            self.this_is_first_game = False
+#         if df_sqlite_master.shape[0] == 0:
+#             self.this_is_first_game = True
+#             self.this_is_first_game_with_current_settings = True
+#         else:
+#             self.this_is_first_game = False
 
-        # Check if a game has already been played with similar game settings
-        if self.this_is_first_game == False:
-            condition = ''.join([' AND ' + condition for condition in self.game_settings_query_condition])
-            query_summary = f"""
-                SELECT 
-                    game_duration
-                    , sentence_length
-                    , accuracy
-                    , wpm
-                    , score
+#         # Check if a game has already been played with similar game settings
+#         if self.this_is_first_game == False:
+#             condition = ''.join([' AND ' + condition for condition in self.game_settings_query_condition])
+#             query_summary = f"""
+#                 SELECT 
+#                     game_duration
+#                     , sentence_length
+#                     , accuracy
+#                     , wpm
+#                     , score
 
-                FROM summary_per_game
-                WHERE 1=1
-                    {condition}
-                """
+#                 FROM summary_per_game
+#                 WHERE 1=1
+#                     {condition}
+#                 """
 
-            df_summary = pd.read_sql_query(query_summary, self.con) 
+#             df_summary = pd.read_sql_query(query_summary, self.con) 
             
-            if df_summary.shape[0] == 0:
-                self.this_is_first_game_with_current_settings = True
-            else:
-                self.this_is_first_game_with_current_settings = False
+#             if df_summary.shape[0] == 0:
+#                 self.this_is_first_game_with_current_settings = True
+#             else:
+#                 self.this_is_first_game_with_current_settings = False
 
 
     
-    def best_game(self, sort_by='score', conditions=['1=1']):
-        '''Return the game settings of the best game based on the sorting'''
+#     def best_game(self, sort_by='score', conditions=['1=1']):
+#         '''Return the game settings of the best game based on the sorting'''
 
-        full_condition = ''.join([' AND ' + condition for condition in conditions + self.game_settings_query_condition])
+#         full_condition = ''.join([' AND ' + condition for condition in conditions + self.game_settings_query_condition])
 
-        query = f"""
-            SELECT 
-                * 
-            FROM summary_per_game
-            WHERE 1=1
-                {full_condition}
-            ORDER BY {sort_by}
-            """
+#         query = f"""
+#             SELECT 
+#                 * 
+#             FROM summary_per_game
+#             WHERE 1=1
+#                 {full_condition}
+#             ORDER BY {sort_by}
+#             """
 
-        df_summary = pd.read_sql_query(query, self.con)   
+#         df_summary = pd.read_sql_query(query, self.con)   
         
-        # If there hasn't been any game played with the settings, catch the keyerror 
-        try:
-            best_game = df_summary.loc[0, :].to_dict()
-        except KeyError: 
-            best_game = {col: 0 for col in df_summary.columns}
+#         # If there hasn't been any game played with the settings, catch the keyerror 
+#         try:
+#             best_game = df_summary.loc[0, :].to_dict()
+#         except KeyError: 
+#             best_game = {col: 0 for col in df_summary.columns}
 
-        return best_game
+#         return best_game
     
 
-    def max_mean_score(self, conditions=['1=1']):
-        '''Return max and average metrics'''
+#     def max_mean_score(self, conditions=['1=1']):
+#         '''Return max and average metrics'''
 
-        full_condition = ''.join([' AND ' + condition for condition in conditions + self.game_settings_query_condition])
+#         full_condition = ''.join([' AND ' + condition for condition in conditions + self.game_settings_query_condition])
 
-        query = f"""
-            SELECT 
-                game_duration
-                , sentence_length
-                , accuracy
-                , wpm
-                , score
+#         query = f"""
+#             SELECT 
+#                 game_duration
+#                 , sentence_length
+#                 , accuracy
+#                 , wpm
+#                 , score
 
-            FROM summary_per_game
-            WHERE 1=1
-                {full_condition}
-            """
+#             FROM summary_per_game
+#             WHERE 1=1
+#                 {full_condition}
+#             """
 
-        df_summary = pd.read_sql_query(query, self.con) 
-        try:
-            df_summary = df_summary.describe().loc[['max', 'mean'], :].T
-        except KeyError: # If first game with those game settings
-            df_summary = pd.DataFrame({'max': [0] * 5, 'mean': [0] * 5}, index=['game_duration', 'sentence_length', 'accuracy', 'wpm', 'score'])
+#         df_summary = pd.read_sql_query(query, self.con) 
+#         try:
+#             df_summary = df_summary.describe().loc[['max', 'mean'], :].T
+#         except KeyError: # If first game with those game settings
+#             df_summary = pd.DataFrame({'max': [0] * 5, 'mean': [0] * 5}, index=['game_duration', 'sentence_length', 'accuracy', 'wpm', 'score'])
 
-        return df_summary
+#         return df_summary
 
     
-    def count_games(self, conditions=['1=1']):
-        '''Counts how many games have been played.
+#     def count_games(self, conditions=['1=1']):
+#         '''Counts how many games have been played.
         
-        Parameter
-        ---------
-        conditions list: list of condition to be passed in the query'''
+#         Parameter
+#         ---------
+#         conditions list: list of condition to be passed in the query'''
 
-        full_condition = ''.join([' AND ' + condition for condition in conditions + self.game_settings_query_condition])
+#         full_condition = ''.join([' AND ' + condition for condition in conditions + self.game_settings_query_condition])
 
-        query = f"""
-            SELECT 
-                *
+#         query = f"""
+#             SELECT 
+#                 *
 
-            FROM summary_per_game
-            WHERE 1=1
-                {full_condition}
-            """
+#             FROM summary_per_game
+#             WHERE 1=1
+#                 {full_condition}
+#             """
 
-        game_count = pd.read_sql_query(query, self.con).shape[0]
-        return game_count
+#         game_count = pd.read_sql_query(query, self.con).shape[0]
+#         return game_count
 
 
-    def make_condition(self):
-        '''Generate a string containing the current 
-        games settings so that every oher query that 
-        pulls games to compare high score, mean, etc
-        compares the same games
-        '''
+#     def make_condition(self):
+#         '''Generate a string containing the current 
+#         games settings so that every oher query that 
+#         pulls games to compare high score, mean, etc
+#         compares the same games
+#         '''
 
-        self.game_settings_query_condition = []
-        for key, value in self.game_settings:
-            if type(value) == str: 
-                condition = f'{key} == "{value}"'
-            else:
-                condition = f'{key} == {value}'
+#         self.game_settings_query_condition = []
+#         for key, value in self.game_settings:
+#             if type(value) == str: 
+#                 condition = f'{key} == "{value}"'
+#             else:
+#                 condition = f'{key} == {value}'
                 
-            self.game_settings_query_condition.append(condition)
+#             self.game_settings_query_condition.append(condition)
 
 
-    def score_game(self, key_pressed=None):
-        '''Takes the list of keyy pressed during the game and calculate 
-        the different metrics like game duration, accuracy, wpm
+#     def score_game(self, key_pressed=None):
+#         '''Takes the list of keyy pressed during the game and calculate 
+#         the different metrics like game duration, accuracy, wpm
         
-        Parameter
-        ---------
-        keys_pressed: list of list containing the guess, corrct_key 1/0, epoch and game_id
+#         Parameter
+#         ---------
+#         keys_pressed: list of list containing the guess, corrct_key 1/0, epoch and game_id
         
-        '''
+#         '''
 
-        # Create a df to store and manipulate the data of the game
-        column_names = ['key', 'correct_key', 'time', 'game_id']
-        df = pd.DataFrame(key_pressed, columns=column_names)
+#         # Create a df to store and manipulate the data of the game
+#         column_names = ['key', 'correct_key', 'time', 'game_id']
+#         df = pd.DataFrame(key_pressed, columns=column_names)
 
-        first_second, last_second = df.iloc[[0, -1], 2]
-        game_duration = round(last_second - first_second) if last_second - first_second > 10 else round(last_second - first_second, 2) # Don't round the seconds unless games of less than 10 second (for development only unless you're putting some lame ass rules)
-        keys_pressed = df.shape[0]
-        keys_to_press = df.query('correct_key == 1').shape[0]
-        accuracy = keys_to_press / keys_pressed
-        wpm = keys_to_press / (game_duration / 60) / 5
-        score = accuracy * wpm * len(self.sentence)
-
-
-
-        if self.this_is_first_game == False:
-            self.game_scores = game_duration, keys_to_press, accuracy, wpm, score
-
-        else: 
-            score_info_to_print =   f'Game duration:     {game_duration} seconds\n' +\
-                                    f'Chars to type:     {keys_to_press}\n' +\
-                                    f'Chars typed:       {keys_pressed}\n' +\
-                                    f'Typing Accuracy:   {accuracy:.1%}\n' +\
-                                    f'WPM:               {round(wpm)}\n' +\
-                                    f'Score:             {round(score)}\n'
-            print(score_info_to_print)
-            print('Play one more game to see highscores and stats comparison')
+#         first_second, last_second = df.iloc[[0, -1], 2]
+#         game_duration = round(last_second - first_second) if last_second - first_second > 10 else round(last_second - first_second, 2) # Don't round the seconds unless games of less than 10 second (for development only unless you're putting some lame ass rules)
+#         keys_pressed = df.shape[0]
+#         keys_to_press = df.query('correct_key == 1').shape[0]
+#         accuracy = keys_to_press / keys_pressed
+#         wpm = keys_to_press / (game_duration / 60) / 5
+#         score = accuracy * wpm * len(self.sentence)
 
 
-    def compare_game(self):
-        df_summary = self.max_mean_score()
 
-        if type(df_summary) == dict: 
-            print('Play another game to see the stats')
-            return 
+#         if self.this_is_first_game == False:
+#             self.game_scores = game_duration, keys_to_press, accuracy, wpm, score
 
-        df_summary.insert(0, 'game', self.game_scores)
-        max_diff = ((df_summary['game'] - df_summary['max']) / df_summary['max'] * 100)
-        df_summary.insert(2, 'max_diff', max_diff)
-        mean_diff = ((df_summary['game'] - df_summary['mean']) / df_summary['mean'] * 100)
-        df_summary.insert(4, 'mean_diff', mean_diff)
-        df_summary = df_summary.reset_index().T.reset_index().T.replace('index', '')
-        # df_summary =.rename({'max': 'best', 'max_diff': 'best_diff'}, axis=1)
-        # data_col_index = [[''] + list(df_summary.columns)] + [[df_summary.index[index]] + [value for value in row] for index, row in enumerate(data)]
+#         else: 
+#             score_info_to_print =   f'Game duration:     {game_duration} seconds\n' +\
+#                                     f'Chars to type:     {keys_to_press}\n' +\
+#                                     f'Chars typed:       {keys_pressed}\n' +\
+#                                     f'Typing Accuracy:   {accuracy:.1%}\n' +\
+#                                     f'WPM:               {round(wpm)}\n' +\
+#                                     f'Score:             {round(score)}\n'
+#             print(score_info_to_print)
+#             print('Play one more game to see highscores and stats comparison')
 
-        print(f'Games count: {self.count_games()}')
-        text_to_print = ''
-        for y, row in enumerate(df_summary.to_numpy().tolist()):
-            for x, value in enumerate(row):
-                if x == 0 or y == 0: # Columns and rows names
-                    value = value
-                    current_string = get_correct_size_string(value, 20)
+
+#     def compare_game(self):
+#         df_summary = self.max_mean_score()
+
+#         if type(df_summary) == dict: 
+#             print('Play another game to see the stats')
+#             return 
+
+#         df_summary.insert(0, 'game', self.game_scores)
+#         max_diff = ((df_summary['game'] - df_summary['max']) / df_summary['max'] * 100)
+#         df_summary.insert(2, 'max_diff', max_diff)
+#         mean_diff = ((df_summary['game'] - df_summary['mean']) / df_summary['mean'] * 100)
+#         df_summary.insert(4, 'mean_diff', mean_diff)
+#         df_summary = df_summary.reset_index().T.reset_index().T.replace('index', '')
+#         # df_summary =.rename({'max': 'best', 'max_diff': 'best_diff'}, axis=1)
+#         # data_col_index = [[''] + list(df_summary.columns)] + [[df_summary.index[index]] + [value for value in row] for index, row in enumerate(data)]
+
+#         print(f'Games count: {self.count_games()}')
+#         text_to_print = ''
+#         for y, row in enumerate(df_summary.to_numpy().tolist()):
+#             for x, value in enumerate(row):
+#                 if x == 0 or y == 0: # Columns and rows names
+#                     value = value
+#                     current_string = get_correct_size_string(value, 20)
                 
-                elif (y != 0 and x in (3, 5)): # _diff cols (variation %)
-                    value = round(value, 2)
-                    current_string = color_int(value, spacing=20, suffix=' %')
+#                 elif (y != 0 and x in (3, 5)): # _diff cols (variation %)
+#                     value = round(value, 2)
+#                     current_string = color_int(value, spacing=20, suffix=' %')
                 
-                elif y in (1, 2): # game duration and sentene length
-                    value = int(value)
-                    current_string = get_correct_size_string(int(value), 20)
+#                 elif y in (1, 2): # game duration and sentene length
+#                     value = int(value)
+#                     current_string = get_correct_size_string(int(value), 20)
 
-                elif y in (3,4): # Accuracy and wpm
-                    value = round(value, 2)
-                    current_string = get_correct_size_string(round(value, 2), 20)
+#                 elif y in (3,4): # Accuracy and wpm
+#                     value = round(value, 2)
+#                     current_string = get_correct_size_string(round(value, 2), 20)
 
-                text_to_print += current_string + '\t'
+#                 text_to_print += current_string + '\t'
 
-            text_to_print += '\n'
+#             text_to_print += '\n'
 
-        print(text_to_print)
+#         print(text_to_print)
 
 
 
-# score = Score(game_settings)
-# best_wpm = score.best_game(sort_by='wpm desc')['wpm']
+# # score = Score(game_settings)
+# # best_wpm = score.best_game(sort_by='wpm desc')['wpm']
 
 
 
