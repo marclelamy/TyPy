@@ -1,37 +1,7 @@
 import numpy as np
 import pandas as pd
-# from termcolor import colored
-# from src.display import get_correct_size_string, color_int
-# import sqlite3
 
 
-
-# Game settings
-game_id = np.random.randint(10**10)
-word_count = 25  #np.random.randint(25, 40)
-min_word_length = 0 # min length of a word
-max_word_length = 1000 # max length of a word
-capitalized_words_count = 0 # Set a float between 0 and 1 for the percentage of word that will be generated with a/multiple random case letter
-capitalized_letters_count_perc = 0 # Set a float between 0 and 1 for the percentage of the letters of the word that will be capitalized. Set an integer for the nmumber or random case statement letters. 1 is all letters capitalized not 1 word. if 'first' then only first letter will be capitalized
-punctuation_word_count_perc = 0 # Same as above but for punctuation around the word
-force_shift = False # Force to type the right shift of the keyboard
-hard_mode = False # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed
-train_letters = False 
-train_letters_easy_mode = False # true for this will proposed most optimal words to type fast and beat records
-player_name = 'marc'
-
-game_settings = {'game_id': game_id,
-                 'word_count': word_count, 
-                 'min_word_length': min_word_length, 
-                 'max_word_length': max_word_length, 
-                 'capitalized_words_count': capitalized_words_count, 
-                 'capitalized_letters_count_perc': capitalized_letters_count_perc, 
-                 'punctuation_word_count_perc': punctuation_word_count_perc, 
-                 'force_shift': force_shift,
-                 'hard_mode': hard_mode,
-                 'train_letters': train_letters,
-                 'train_letters_easy_mode': train_letters_easy_mode,
-                 'player_name': player_name}
 
 
 
@@ -81,26 +51,27 @@ class Score():
                 , min(kp.time) mindatetime_unix
                 , datetime(max(kp.time), 'unixepoch', 'localtime') as date_time
                 , max(kp.time) - min(kp.time) as game_duration
-                , sum(case when kp.correct_key = 1 then 1 else 0 end) as keys_to_press
+                , sum(kp.correct_key) as keys_to_press
                 , count(*) as keys_pressed
-                , round(CAST(sum(case when kp.correct_key = 1 then 1 else 0 end) as REAL) / count(*), 3) as accuracy
-                , sum(case when kp.correct_key = 1 then 1 else 0 end) / ((max(kp.time) - min(kp.time)) / 60) / 5 as wpm
+                , round(CAST(sum(kp.correct_key) as REAL) / count(*), 3) as accuracy
+                , sum(kp.correct_key) / ((max(kp.time) - min(kp.time)) / 60) / 5 as wpm
+                , sum(kp.correct_key) / (max(kp.time) - min(kp.time)) as cps
                 , length(cgs.sentence) as sentence_length
-                , length(cgs.sentence) * (sum(case when kp.correct_key = 1 then 1 else 0 end) / ((max(kp.time) - min(kp.time)) / 60) / 5) * round(CAST(sum(case when kp.correct_key = 1 then 1 else 0 end) as REAL) / count(*), 3) as score
+                , length(cgs.sentence) * (sum(kp.correct_key) / ((max(kp.time) - min(kp.time)) / 60) / 5) * round(CAST(sum(kp.correct_key) as REAL) / count(*), 3) as score
                 , cgs.sentence
                 , cgs.word_count
-                , coalesce(cgs.max_word_length, 1000) as max_word_length
-                , coalesce(cgs.min_word_length, 0) as min_word_length
-                , coalesce(cgs.capitalized_words_count, 0) as capitalized_words_count
-                , coalesce(cgs.capitalized_letters_count_perc, 0) as capitalized_letters_count_perc
-                , coalesce(cgs.punctuation_word_count_perc, 0) as punctuation_word_count_perc
+                , coalesce(cgs.word_length_max, 1000) as word_length_max
+                , coalesce(cgs.word_length_min, 0) as word_length_min
+                , coalesce(cgs.capitalized_words, 0) as capitalized_words
+                , coalesce(cgs.capitalized_letters, 0) as capitalized_letters
+                , coalesce(cgs.punctuation, 0) as punctuation
                 , coalesce(cgs.force_shift, 0) as force_shift
-                , coalesce(cgs.hard_mode, 0) as hard_mode
-                , coalesce(cgs.train_letters, 0) as train_letters
+                , coalesce(cgs.difficulty, 0) as difficulty
+                , coalesce(cgs.train, 0) as train
                 , case 
-                    when cgs.train_letters in (null, 0) then 0
-                    else coalesce(cgs.train_letters_easy_mode, 0)
-                    end as train_letters_easy_mode
+                    when cgs.train in (null, 0) then 0
+                    else coalesce(cgs.train_easy, 0)
+                    end as train_easy
                 , LOWER(cgs.player_name) as player_name
 
             from keys_pressed kp 

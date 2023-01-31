@@ -5,6 +5,7 @@ import toml
 import os
 from tabulate import tabulate
 import numpy as np
+import pandas as pd
 from sentence import Sentence
 from score import Score
 from termcolor import colored
@@ -134,6 +135,7 @@ class Game():
 
 
     def change_rule(self): 
+        '''make tbl with all definitions, config (header, def, each config)'''
         print('Change rule')
 
 
@@ -261,19 +263,38 @@ class Game():
              'game_id': self.game_id}
         )
         self.score.log_game(game_data)
-        self.score.summarize_games_scores(self)
-        print(game_data)
+        self.score.summarize_games_scores()
+
+
+        # Show game stats
+        query = f'''
+        select 
+            round(game_duration) as game_duration 
+            , keys_to_press
+            , keys_pressed
+            , accuracy
+            , round(wpm, 2) as wpm
+            , round(cps) as cps
+            , word_count
+        
+        from summary_per_game 
+        where 1=1
+            and game_id = {self.game_id} 
+        '''
+        df_game_summary = pd.read_sql_query(query, self.con)
+        print(tabulate(df_game_summary.T, headers=['Metric', 'Score']))
+        print('\n\n')
 
 
         # Propose to save on gbg, back to main menu, leaderboard
-    
 
 
 
 
 
 
-
+    # def query(self, query): 
+    #     return pd.read_sql_query(query', self.con)
 
 
 
