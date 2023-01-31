@@ -1,0 +1,53 @@
+Easy / quick:
+* Change summary_per_game to games_summary
+* The functions of main should be in a separate file in src/ same 'query_db.py' or something
+* Calculate the maximum number of spaces and line break to recommand resizing the window.
+* Add info menu to know what all accronyms mean 
+* set the default config first in case another config doesn't have all parameters
+
+
+Medium : 
+* rewrite next_key_pressed
+* Add a game setting to only train one hand or one keyboard row
+* check in the analytics each hand and each finger and each row of the keyboard
+* Add two new variable for filtering words based on unique letters in word or how the number of unique letters can be an int
+* the average time for letter (for traini.) need to be on the last xx games and not everything
+* in the main menu add a very 
+* Add options to add your own text file
+* Window resizing options
+* Adding more texts for coding
+* Score 
+    * Add CPS for char per second
+* Settings
+    * Add/remove display information 
+        * WPM 
+        * Words left 
+        *
+    * Change words printed
+* Viz 
+    * make a chart to that you see the most struggle char over time and how they evolved and changed
+* command to stop the game in game like double enter or something that leads to self.stop_game() 
+* in end game when displaying scores, display also the diff compared to last game not just best/avg
+
+
+
+
+Hard / long: 
+* Create a menu to set up the game using next key pressed 
+    * It needs to be easy and should be able to navigate with the keys of the keybaord
+    * It needs a table to set preferences and games templates of favorites game settings in the db
+* Add on Pypi to pip install and with a command to launch it from terminal and homebrew
+* Create a score 
+    * https://medium.com/swlh/interpreting-principal-components-fifa20-players-use-case-639fde373bac
+
+
+
+
+
+
+game preference config file: 
+* toggle ui on/off aka display true/false
+* 
+
+
+
