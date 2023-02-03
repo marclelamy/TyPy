@@ -7,8 +7,41 @@ import pandas as pd
 
 
 class Score(): 
-    def __init__(self, con):
+    def __init__(self, game_config, con):
+        self.game_config = game_config
         self.con = con
+        
+        self.make_condition()
+
+
+    def make_condition(self): 
+        '''Makes a condition for all the WHERE statements that
+        load data so that the compared games have the same rules.
+        '''
+        self.general_condition = ''
+        rules = {'word_count': 'int', 
+                 'word_length_max': 'int', 
+                 'word_length_min': 'int', 
+                 'capitalized_words': 'int', 
+                 'capitalized_letters': 'int', 
+                 'punctuation': 'int', 
+                 'force_shift': 'bool', 
+                 'difficulty': 'str', 
+                 'train': 'int', 
+                 'train_easy': 'int'}
+        for rule, type in rules.items(): 
+            if type == 'str': 
+                self.general_condition += f' AND {rule} = "{self.game_config[rule]}" '
+            else: 
+                self.general_condition += f' AND {rule} = {self.game_config[rule]} '
+
+
+        print(self.general_condition)
+
+
+
+
+
 
     
     def log_game(self, game_data): 
@@ -53,6 +86,7 @@ class Score():
                 , max(kp.time) - min(kp.time) as game_duration
                 , sum(kp.correct_key) as keys_to_press
                 , count(*) as keys_pressed
+                , count(*) - sum(kp.correct_key) as errors
                 , round(CAST(sum(kp.correct_key) as REAL) / count(*), 3) as accuracy
                 , sum(kp.correct_key) / ((max(kp.time) - min(kp.time)) / 60) / 5 as wpm
                 , sum(kp.correct_key) / (max(kp.time) - min(kp.time)) as cps
@@ -83,7 +117,6 @@ class Score():
 
         df_high_score = pd.read_sql_query(query, self.con)
         df_high_score.to_sql('summary_per_game', self.con, if_exists='replace', index=False)
-        print('Summarize games')
 
 
     
@@ -92,9 +125,51 @@ class Score():
         print('Summary rules')
 
 
+    def load_game_stats(self): 
+        query = f'''
+        select 
+            round(game_duration) as game_duration 
+            , keys_to_press
+            , keys_pressed
+            , keys_pressed - keys_to_press as errors
+            , round(accuracy * 100, 2) as accuracy
+            , round(wpm, 2) as wpm
+            --, round(cps, 4) as cps
+            , word_count
+        
+        from summary_per_game 
+        where 1=1
+            and game_id = {self.game_id} 
+        '''
+
+        df_game_summary = pd.read_sql_query(query, self.con)
+
+
+    def load_best_stats(self): 
+        query = f'''
+        select 
+            round(game_duration) as game_duration 
+            , keys_to_press
+            , keys_pressed
+            , keys_pressed - keys_to_press as errors
+            , round(accuracy * 100, 2) as accuracy
+            , round(wpm, 2) as wpm
+            --, round(cps, 4) as cps
+            , word_count
+        
+        from summary_per_game 
+        where 1=1
+            and game_id = {self.game_id} 
+            and word_count = {self.word_count}
+        '''
+
+        df_game_summary = pd.read_sql_query(query, self.con)
 
 
 
+
+    # def make_conditions(self): 
+    #     for key, value in self.conf
 
 
 
