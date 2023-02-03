@@ -3,6 +3,7 @@ import time
 import sqlite3
 import toml
 import os
+import shutil
 from tabulate import tabulate
 import numpy as np
 import pandas as pd
@@ -17,26 +18,35 @@ class Game():
         self.game_id = np.random.randint(10**10)
         self.create_db_if_doesnt_exists()
         self.available_configs = [file.replace('.toml', '') for file in os.listdir('configs/')]
-        self.score = Score(self.con)
         self.cwd = os.getcwd()
         self.main_menu()
 
 
-    def check_if_first_game(self): 
-        '''Check if a 
-        '''
-
-        if os.path.exists('data/main_database.db'): 
-            self.con = sqlite3.connect('data/main_database.db')
-        else: 
-            self.create_db()
-
-
-        #########
         # Set the name of the player name 
             # N - set yout name 
             # D - default (you become npc)
         #########
+    @staticmethod
+    def read_config(config='game_config') -> dict: 
+        '''Given a config file name, reads it and return a dictionary
+        with the game settings.'''
+        with open(f'configs/{config}.toml', 'r') as f:
+            config = toml.load(f)
+
+        # with open(f'configs/game_default.toml', 'r') as f:
+        #     default_config = toml.load(f)
+        
+        # for key, value in default_config.items(): 
+        #     if key not in config.keys(): 
+        #         config[key] = value 
+
+        #     else: 
+        #         config_value = config[key]
+
+        #         if key == 'word_count': 
+                    
+        return config
+
 
     def create_db_if_doesnt_exists(self): 
         '''Create the two tables of the database
@@ -62,6 +72,10 @@ class Game():
         for query in [keys_pressed, games_settings]: 
             self.con.execute(query)
         
+
+
+
+
 
 
     def main_menu(self): 
@@ -149,7 +163,19 @@ class Game():
 
 
     def change_game_config(self):
+        '''
+        '''
+        print(self.available_configs)
+        time.sleep(1)
+        self.game_config = self.read_config('performance')['game_config']
+
+
+        # if change config, set default first in case config doesnt have all the rules
         print('change game config')
+
+
+        self.start_game()
+
 
 
     def global_preference(self): 
@@ -163,15 +189,23 @@ class Game():
         print('Leaderboard')
 
 
-
+    def check_game_config(self): 
+        print('check_game_config')
 
 
     def start_game(self): 
         self.print_game_config()
         print('Play game', '\n'*20)
 
-        # Create sentence
-        sentence = Sentence(self.game_config, self.cwd).sentence
+        # Create sentence and score
+        self.score = Score(
+            self.game_config,
+            self.con
+            )
+        sentence = Sentence(
+            self.game_config, 
+            self.cwd
+            ).sentence
 
         # self.best_score = Score().best_scores(self.config) # best game for each of the rules or only for one? i think the best score for each of the rules. This function in Score() could calculate for each of the rules the best, avg (describe() type) and would return what would be in the dictionary/parameters of the function
         keys_pressed = []
@@ -234,18 +268,21 @@ class Game():
     def hud(self, display_sentence, words_left, correct_key_count, keys_pressed): 
         '''What to print during the game
         '''
-        infos_to_print = ''
+        infos_to_print = '\n' * 20
         infos_to_print += f'Words left to type: {words_left}\n'
         if len(keys_pressed) > 1:
             # print(keys_pressed[-1][3],  keys_pressed[0][3])
             wpm = self.wpm(correct_key_count, keys_pressed[-1][3] - keys_pressed[0][3])
-            infos_to_print += f'WPM: {round(wpm, 1)}\n'
+            wpm_formatted = self.color_formatting(round(wpm, 1), 70)
+            infos_to_print += f'WPM: {wpm_formatted}\n'
 
-
-        infos_to_print += ' ' + ' '.join(display_sentence.split(' ')[:5]) + ' ' * 20
+        width, heigh = shutil.get_terminal_size()
+        infos_to_print += ' ' + ' '.join(display_sentence.split(' '))
+        infos_to_print += ' ' * (width - len(infos_to_print)-10)
         # print(infos_to_print, '\t'*5, end='\r')
         # print(repr(infos_to_print), '\n'*5)
-        self.print_multine_with_carriage(infos_to_print) # This adds a new line at the end
+        print(infos_to_print)
+        # self.print_multine_with_carriage(infos_to_print) # This adds a new line at the end
         # sys.stdout.write(infos_to_print)
         
 
@@ -255,6 +292,7 @@ class Game():
         '''What happens after the game completed the full sentence. 
         the game data will always be saved then it's matter of user's
         ''' 
+        print('\n'*20)
         # Log game
         game_data = self.game_config
         game_data.update(
@@ -264,26 +302,7 @@ class Game():
         )
         self.score.log_game(game_data)
         self.score.summarize_games_scores()
-
-
-        # Show game stats
-        query = f'''
-        select 
-            round(game_duration) as game_duration 
-            , keys_to_press
-            , keys_pressed
-            , accuracy
-            , round(wpm, 2) as wpm
-            , round(cps) as cps
-            , word_count
-        
-        from summary_per_game 
-        where 1=1
-            and game_id = {self.game_id} 
-        '''
-        df_game_summary = pd.read_sql_query(query, self.con)
-        print(tabulate(df_game_summary.T, headers=['Metric', 'Score']))
-        print('\n\n')
+        self.compare_game()
 
 
         # Propose to save on gbg, back to main menu, leaderboard
@@ -291,16 +310,166 @@ class Game():
 
 
 
+    def color_formatting(self, val_to_print, val_to_compare, higher_better=True) -> str: 
+        '''
+        Format a value by adding color to it based on its comparison with another value.
+        
+        Parameters:
+        val_to_print (int or float): The value to be formatted and printed.
+        val_to_compare (int or float): The value to be compared with `val_to_print`.
+        higher_better (bool, optional, default True): A flag indicating whether higher values are considered better (True) or lower values are considered better (False). Default is True.
+
+        Returns:
+            str: The formatted value with color added to it. The color depends on the comparison between `val_to_print` and `val_to_compare`:
+                * Red if `val_to_print` is smaller than `val_to_compare` when `higher_better` is True, or 
+                * Blue if `val_to_print` is equal to `val_to_compare`, or 
+                * Red if `val_to_print` is greater than `val_to_compare` when `higher_better` is False.
+        '''
+        sign = 1 if higher_better == True else -1
+        print(val_to_print, val_to_compare)
+        if sign * val_to_print < sign * val_to_compare: 
+            return colored(val_to_print, 'red')
+        elif sign * val_to_print == sign * val_to_compare: 
+            return colored(val_to_print, 'blue')
+        else: 
+            return colored(val_to_print, 'green')
 
 
     # def query(self, query): 
     #     return pd.read_sql_query(query', self.con)
 
 
+    ################
+    # rewrite this 
+    ################
+    def compare_game(self): 
+        '''Compare stats of the game '''
+
+        # # Current game stats
+        # query = f'''
+        # select 
+        #     round(game_duration) as game_duration 
+        #     , keys_to_press
+        #     , keys_pressed
+        #     , keys_pressed - keys_to_press as errors
+        #     , round(accuracy * 100, 2) as accuracy
+        #     , round(wpm, 2) as wpm
+        #     --, round(cps, 4) as cps
+        #     , word_count
+        
+        # from summary_per_game 
+        # where 1=1
+        #     and game_id = {self.game_id} 
+        # '''
+        # df_game_summary = pd.read_sql_query(query, self.con)
+        # print(tabulate(df_game_summary.T, headers=['Metric', 'Score'], numalign="left"))
+        # print('\n\n')
+
+        metrics = ['wpm', 'accuracy', 'game_duration', 'keys_pressed', 'keys_to_press', 'errors']
+        comparisons = ['current', 'max', 'mean', 'last']
+        variation = True
+
+        general_condition = self.score.general_condition
+        df = pd.read_sql_query(f'select * from summary_per_game where 1=1 {general_condition}', self.con)
+
+        df_described = df.describe(include='all')
+        df_described = df_described.loc[[index for index in df_described.index if index in comparisons]]
+
+        if 'last' in comparisons: 
+            df_described.loc['last'] = df.sort_values('date_time', ascending=False).iloc[1]
+        df_described.loc['current'] = df.sort_values('date_time', ascending=False).iloc[0]
+
+        df_described = df_described[metrics]
+
+        # # df_described['max_diff'] = df_described['max_diff'].astype(int).astype(str).replace('0', 'New Record!')
+        # # df_described = df_described.drop(['mean'], axis=1)[['current', 'max', 'max_diff', 'mean_diff', 'last', 'last_diff']].reset_index(names='')
+
+
+        # tabulate_values = [[]]
+
+        # # for column in df_described.columns: 
+        # #     for row in df_described.index: 
+        # #         value = df.loc[row, column]
+
+        # #         if row == 'wpm': 
+
+        # # df_described.loc['accuracy'] * 100 
+
+        # formatting = {
+        #     'wpm': {''}
+        # }
+
+        df_described['wpm'] = df_described['wpm'].round(1)
+        df_described['accuracy'] = (df_described['accuracy'] * 100).round(2)
+        df_described['game_duration'] = df_described['game_duration'].astype(int)
+        df_described['keys_to_press'] = df_described['keys_to_press'].astype(int)
+        df_described['keys_pressed'] = df_described['keys_pressed'].astype(int)
+        df_described['errors'] = df_described['errors'].astype(int)
+
+
+        # df_described = df_described.T
 
 
 
 
+        # df_described = df_described.T#.astype(str).T[comparisons]
+
+
+
+        # df_described['max_diff'] = (df_described['max'] - df_described['current']).astype(int)
+        # # df_described['max_variation'] = df_described['current'] / df_described['max_diff'] * 100
+        # df_described['mean_diff'] = (df_described['mean'] - df_described['current'])
+        # # df_described['mean_variation'] = df_described['current'] / df_described['mean_diff'] * 100
+        # df_described['last_diff'] = df_described['last'] - df_described['current']
+        # # df_described['last_variation'] = df_described['current'] / df_described['last_diff'] * 100
+
+
+        # df_described = df_described.reset_index(names=)
+
+        higher_better_map = {
+            'wpm': False,
+            'accuracy': False,
+            'game_duration': True, 
+            'keys_pressed': False, 
+            'keys_to_press': False, 
+            'errors': True,
+        }
+
+
+
+        # tabular_data = []
+        # for column in df_described.columns:
+        #     if column in ['current']:
+        #         continue
+            
+        #     current_value = df_described.loc[index, 'current']
+        #     for index in df_described.index:
+        #         other_value = df_described.loc[index, column]
+        #         comparison = color_formatting(current_value, other_value, higher_better_map[column])
+        #         tabular_data.append([index, comparison])
+
+        tabular_data = []
+        for metric in metrics: 
+            row = [metric]
+            for comparison in comparisons: 
+                current_value = df_described.loc['current', metric]    
+                if comparison == 'current': 
+                    row.append(current_value)
+                    continue 
+            
+                comparison_value = df_described.loc[comparison, metric]
+                if metric in ('wpm', 'accuracy'):
+                    value = self.color_formatting(comparison_value, current_value, higher_better_map[metric])
+                else: 
+                    value = comparison_value
+                row.append(value )
+            tabular_data.append(row)
+
+        # tabular_data = list(map(list, zip(*tabular_data)))
+
+        # display(df_described)
+        print(tabulate(tabular_data, headers=[''] + comparisons))
+        # # tabular_data
 
 
 
@@ -340,14 +509,6 @@ class Game():
 
 
 
-    @staticmethod
-    def read_config(config='game_config') -> dict: 
-        '''Given a config file name, reads it and return a dictionary
-        with the game settings.'''
-        with open(f'configs/{config}.toml', 'r') as f:
-            config = toml.load(f)
-        return config
-        
 
 
     # def global_game
