@@ -8,8 +8,9 @@ pygame.init()
 
 #########################
 # REWRITE THIS FUNCTION #
+# Add some inclusion and exclusion of character type, symbols and stuff
 #########################
-def next_key_pressed():
+def next_key_pressed(recursive=[]):
     '''Detects whick key gets pressed and which shift if combination.
     Example: a is typed a where A is typed shift + A. 
     
@@ -34,12 +35,21 @@ def next_key_pressed():
                 guess = pygame.key.name(event.key)
                 
                 if shift_pressed and guess != 'space':
-                    guess = key_map_shift[guess] if shift_pressed is True else guess
+                    try: 
+                        guess = key_map_shift[guess] if shift_pressed is True else guess
+                    except KeyError: 
+                        continue
                     
                 key=guess
                 break
  
         count += 1
+
+
+    if guess in recursive: 
+        guess, _ = next_key_pressed(recursive)
+
+
 
     which_shift = 'right' if right_shift_pressed == True else ('left' if left_shift_pressed == True else None)
     return guess, which_shift

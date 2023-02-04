@@ -44,7 +44,7 @@ class Game():
         #         config_value = config[key]
 
         #         if key == 'word_count': 
-                    
+                
         return config
 
 
@@ -202,6 +202,8 @@ class Game():
             self.game_config,
             self.con
             )
+        try: self.best_wpm = pd.read_sql_query(f'select * from summary_per_game where 1=1 {self.score.general_condition} order by wpm desc limit 1', self.con).loc[0, 'wpm']
+        except: self.best_wpm = 70
         sentence = Sentence(
             self.game_config, 
             self.cwd
@@ -273,7 +275,7 @@ class Game():
         if len(keys_pressed) > 1:
             # print(keys_pressed[-1][3],  keys_pressed[0][3])
             wpm = self.wpm(correct_key_count, keys_pressed[-1][3] - keys_pressed[0][3])
-            wpm_formatted = self.color_formatting(round(wpm, 1), 70)
+            wpm_formatted = self.color_formatting(round(wpm, 1), self.best_wpm)
             infos_to_print += f'WPM: {wpm_formatted}\n'
 
         width, heigh = shutil.get_terminal_size()
