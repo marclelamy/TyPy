@@ -1,5 +1,9 @@
+![](https://github.com/marclelamy/pyTypeFast/blob/main/game_demo.gif)
+
+
+
 ## About the project
-Game to make you type faster. By logging time at which each key is pressed, the game will propose words containing letters you're slow to typeand adapt the proposed words at which you're to make you progress based on your weakness.
+Game in the terminal to make you type faster. By logging time at which each key is pressed, the game will propose words containing letters you're slow to type and adapt the proposed words at which you're to make you progress based on your weakness.
 
 
 
@@ -27,6 +31,16 @@ Game to make you type faster. By logging time at which each key is pressed, the 
 
 
 
+## Features 
+You can navigate through the game 
+
+
+
+## Rules 
+
+
+
+
 ## Usage
 Once you start the game, if you click on anything else or change app focus, the key detection won't detect anything else anymore. If it happens, restart the game.
 
@@ -35,16 +49,16 @@ Once you start the game, if you click on anything else or change app focus, the 
 <details>
 <summary></summary>
 
-   .
-   ├── data                
-   │   ├── queries             # Queries to pull and analyze data from the database
-   │   └── text                # Text files used to propose words during the games
+.
+├── data                
+│   ├── queries             # Queries to pull and analyze data from the database
+│   └── text                # Text files used to propose words during the games
 
-   ├── src                     # Source files
-   │   ├── detect_keys.py              
-   │   ├── display.py              
-   │   ├── log_data.py             
-   │   ├── score.py            # 
+├── src                     # Source files
+│   ├── detect_keys.py              
+│   ├── display.py              
+│   ├── log_data.py             
+│   ├── score.py            # 
 
 </details> 
 
