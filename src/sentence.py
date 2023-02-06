@@ -1,25 +1,29 @@
+import pandas as pd
 import numpy as np
-
-
+from query import Query
+import os
 
 
 class Sentence(): 
-    def __init__(self, game_config, cwd): 
+    def __init__(self, game_config, first_game, con): 
         # self.game_config = game_config
-        self.cwd = cwd
-        print(game_config)
+        self.cwd = os.getcwd()
+        self.game_config = game_config
+        self.query = Query(con)
         # for rule, value in self.game_config.items(): 
         #     setattr(self, rule, value)
-
-        self.load_words(game_config['difficulty'], game_config['word_count'])
-        self.filter_word_length(game_config['word_length_min'], game_config['word_length_max'])
-        self.capitalize_word_list(game_config['capitalized_words'], game_config['capitalized_letters'])
-        self.add_punctuation(game_config['punctuation'], game_config['punctuation_char'])
+        if self.game_config['train'] == False: 
+            self.word_list = self.load_words(game_config['difficulty'], game_config['word_count'], game_config['banned_words'])
+            self.capitalize_word_list(game_config['capitalized_words'], game_config['capitalized_letters'])
+            self.add_punctuation(game_config['punctuation'], game_config['punctuation_char'])
+        else: 
+            self.word_list = self.get_n_slowest_words()
+        
         self.sentence = ' '.join(self.word_list)
 
 
 
-    def load_words(self, difficulty, word_count) -> list:
+    def load_words(self, difficulty, word_count, banned_words) -> list:
         '''Opens one of three lists of words depending on the difficulty. 
         common_words.txt contains 3000 common word
         hard_words.txt contains 370k words words generally longer and harder 
@@ -38,15 +42,14 @@ class Sentence():
             all_words = file.read().split('\n')
 
         # Removing non letters characters and words g/l than max/min length
-        lowered_words = [''.join([char for char in word if char.isalpha()]).lower() for word in all_words]
-        np.random.shuffle(lowered_words)
-        self.word_list = lowered_words[:word_count]
-        # print(time.time() - a)
+        word_list = self.filter_word_length(all_words, self.game_config['word_length_min'], self.game_config['word_length_max'])
+        word_list = [''.join([char for char in word if char.isalpha()]).lower() for word in all_words if word not in banned_words][:word_count]
+        np.random.shuffle(word_list)
+        return word_list
 
 
-    def filter_word_length(self, word_length_min, word_length_max): 
-        self.word_list = [word for word in self.word_list if word_length_min <= len(word) <= word_length_max]
-
+    def filter_word_length(self, all_words, word_length_min, word_length_max): 
+        return [word for word in all_words if word_length_min <= len(word) <= word_length_max]
 
 
     def capitalize_word_list(self, capitalized_words, capitalized_letters): 
@@ -95,3 +98,39 @@ class Sentence():
             self.word_list[index] = word
 
         np.random.shuffle(self.word_list)
+
+
+    def get_n_slowest_words(self):
+        '''Among the list of word, find the words that would 
+        potentially take the longest to type based on the 
+        average duration it takes to the player to type all 
+        each and individual letters of the words.
+
+        parameters
+        ----------
+        word_count int: numbers of worst words to return
+        '''
+
+        # Load key score 
+        df_keytime = self.query.load_query('time_per_key_pressed')
+        key_score = dict(zip(df_keytime['following_key'], df_keytime['time_diff'].round(4)))
+
+        # Get score for each word
+        word_list = self.load_words(self.game_config['difficulty'], None, self.game_config['banned_words'])
+        df_words = pd.DataFrame(word_list, columns=['word'])
+
+        # This is supposed to add a weight so that not only least frequent letters are proposed but it's not working
+        # all_words_letters = ''.join(df_words['word'])
+        # all_words_letters_count = {letter: all_words_letters.count(letter) for letter in set(all_words_letters)}
+        # all_words_letters_count = {key: -(value - min(all_words_letters_count.values()))/(max(all_words_letters_count.values()) - min(all_words_letters_count.values())) for key, value in all_words_letters_count.items()}
+        # key_score = {key: key_score[key] * all_words_letters_count[key] for key in all_words_letters_count.keys()}
+
+        df_words['word_score'] = df_words['word'].apply(lambda word: sum([key_score[char] for char in word.lower().replace('-', '') if char in key_score.keys()]))
+        df_words['avg_letter_score'] = df_words['word_score'] / df_words['word'].str.len()
+
+
+        # Sort dataframe and pick the top 25 words with at least four letters
+        df_words.sort_values('avg_letter_score', ascending=self.game_config['train_easy']).to_csv('word_score.csv', index=False)
+        print(df_words.head(100))
+        top_n = df_words.sort_values('avg_letter_score', ascending=self.game_config['train_easy']).iloc[:self.game_config['word_count'], 0]
+        return list(top_n)

@@ -125,24 +125,24 @@ class Score():
         print('Summary rules')
 
 
-    def load_game_stats(self): 
+    def load_game_stats(self, game_id): 
         query = f'''
         select 
-            round(game_duration) as game_duration 
-            , keys_to_press
-            , keys_pressed
-            , keys_pressed - keys_to_press as errors
+            round(wpm, 2) as wpm
             , round(accuracy * 100, 2) as accuracy
-            , round(wpm, 2) as wpm
+            , round(game_duration) as game_duration 
+            , keys_pressed
+            , keys_to_press
+            , keys_pressed - keys_to_press as errors
             --, round(cps, 4) as cps
-            , word_count
         
         from summary_per_game 
         where 1=1
-            and game_id = {self.game_id} 
+            and game_id = {game_id} 
         '''
 
         df_game_summary = pd.read_sql_query(query, self.con)
+        return df_game_summary
 
 
     def load_best_stats(self): 

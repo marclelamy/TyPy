@@ -1,4 +1,5 @@
 import detect_keys as dk
+from query import Query
 import time
 import sqlite3
 import toml
@@ -13,12 +14,15 @@ from termcolor import colored
 import re
 import sys
 
+
+os.remove('data/main_database.db')
+
 class Game(): 
     def __init__(self): 
         self.game_id = np.random.randint(10**10)
-        self.create_db_if_doesnt_exists()
-        self.available_configs = [file.replace('.toml', '') for file in os.listdir('configs/')]
         self.cwd = os.getcwd()
+        self.check_if_first_game()
+        self.available_configs = [file.replace('.toml', '') for file in os.listdir('configs/')]
         self.main_menu()
 
 
@@ -26,8 +30,8 @@ class Game():
             # N - set yout name 
             # D - default (you become npc)
         #########
-    @staticmethod
-    def read_config(config='game_config') -> dict: 
+    # @staticmethod
+    def read_config(self, config='game_default') -> dict: 
         '''Given a config file name, reads it and return a dictionary
         with the game settings.'''
         with open(f'configs/{config}.toml', 'r') as f:
@@ -44,44 +48,70 @@ class Game():
         #         config_value = config[key]
 
         #         if key == 'word_count': 
-                
+        return self.conf(config)
+
+
+    def conf(self, config): 
+        game_config = config['game_config']
+        if game_config['train'] == True: 
+            if game_config['word_length_min'] < 5: 
+                game_config['word_length_min'] = 5
+
+        config['game_config'] = game_config
         return config
 
 
-    def create_db_if_doesnt_exists(self): 
+    def check_if_first_game(self): 
         '''Create the two tables of the database
         '''
-        self.con = sqlite3.connect('data/main_database.db')
 
-        keys_pressed = '''
-        CREATE TABLE IF NOT EXISTS keys_pressed (
-        key TEXT,
-        correct_key INTEGER,
-        shift TEXT,
-        time REAL,
-        game_id INTEGER,
-        game_settings TEXT
-        )'''
+        if os.path.exists('data/main_database.db'):
+            self.con = sqlite3.connect('data/main_database.db')
+            if pd.read_sql_query('select * from keys_pressed', self.con).empty: 
+                self.first_game = True
+            else: 
+                self.first_game = False
+        else:
+            self.first_game = True
+            self.con = sqlite3.connect('data/main_database.db')
 
-        games_settings = '''
-        CREATE TABLE IF NOT EXISTS games_settings (
-        game_id INTEGER,
-        game_settings TEXT
-        )'''
+            keys_pressed = '''
+            CREATE TABLE IF NOT EXISTS keys_pressed (
+            key TEXT,
+            correct_key INTEGER,
+            shift TEXT,
+            time REAL,
+            game_id INTEGER,
+            game_settings TEXT
+            )'''
 
-        for query in [keys_pressed, games_settings]: 
-            self.con.execute(query)
-        
+            games_settings = '''
+            CREATE TABLE IF NOT EXISTS games_settings (
+            game_id INTEGER,
+            game_settings TEXT
+            )'''
 
+            for query in [keys_pressed, games_settings]: 
+                self.con.execute(query)
 
+        self.query = Query(self.con)
 
+        if self.first_game: 
+            pass
+            # with open(self.cwd + "/configs/game_default.toml", "w") as f:
+            #     print(self.cwd + "/configs/game_default.toml")
+            #     data = toml.load(f)
+            #     player_name = input('How should we call you?')
+            #     data["player_name"] = player_name
+            #     toml.dump(data, f)
 
+    
 
 
     def main_menu(self): 
         '''Menu players see when playing the game.
         '''
-        print('Welcome to pyFastType!\n')
+        print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nWelcome to pyFastType!\n')
         print('Please dont use your mouse but only keyboard keys when prompt too to keep the window active or it wont detect your key presses afterwards.\nHave fun!\n\n')
         choice = self.propose_menu(question = 'Press the letter on the left to navigate through the menu:',
                                    choices = ['Play game', 'Leaderboard', 'Settings'])
@@ -197,17 +227,27 @@ class Game():
         self.print_game_config()
         print('Play game', '\n'*20)
 
+        #### this is pregame loading stuff
+        if not self.first_game: 
+            self.game_config['banned_words'] = self.query.npast_games_words(self.game_config['n_games_banned_words'])
+        else:
+            self.game_config['banned_words'] = []
         # Create sentence and score
-        self.score = Score(
+        self.score = Score( 
             self.game_config,
-            self.con
-            )
+            self.con)
+
         try: self.best_wpm = pd.read_sql_query(f'select * from summary_per_game where 1=1 {self.score.general_condition} order by wpm desc limit 1', self.con).loc[0, 'wpm']
         except: self.best_wpm = 70
+
         sentence = Sentence(
             self.game_config, 
-            self.cwd
+            self.first_game,
+            self.con,
             ).sentence
+
+
+        #### here really starts the game
 
         # self.best_score = Score().best_scores(self.config) # best game for each of the rules or only for one? i think the best score for each of the rules. This function in Score() could calculate for each of the rules the best, avg (describe() type) and would return what would be in the dictionary/parameters of the function
         keys_pressed = []
@@ -297,6 +337,7 @@ class Game():
         print('\n'*20)
         # Log game
         game_data = self.game_config
+        del game_data['banned_words']
         game_data.update(
             {'sentence': sentence,
              'keys_pressed': keys_pressed,
@@ -304,9 +345,13 @@ class Game():
         )
         self.score.log_game(game_data)
         self.score.summarize_games_scores()
-        self.compare_game()
-
-
+        if not self.first_game: 
+            self.compare_game()
+        else:
+            df_game_summary = self.score.load_game_stats(self.game_id)
+            print('Game summary:')
+            print(tabulate(df_game_summary.T))
+        
         # Propose to save on gbg, back to main menu, leaderboard
 
 
@@ -328,7 +373,6 @@ class Game():
                 * Red if `val_to_print` is greater than `val_to_compare` when `higher_better` is False.
         '''
         sign = 1 if higher_better == True else -1
-        print(val_to_print, val_to_compare)
         if sign * val_to_print < sign * val_to_compare: 
             return colored(val_to_print, 'red')
         elif sign * val_to_print == sign * val_to_compare: 
@@ -373,13 +417,19 @@ class Game():
 
         general_condition = self.score.general_condition
         df = pd.read_sql_query(f'select * from summary_per_game where 1=1 {general_condition}', self.con)
+        total_games = len(df)
 
         df_described = df.describe(include='all')
         df_described = df_described.loc[[index for index in df_described.index if index in comparisons]]
 
+
+        df_described.loc['current'] = df.sort_values('date_time', ascending=False).iloc[0]
+        if self.first_game: 
+            print(df_described)
+            return
         if 'last' in comparisons: 
             df_described.loc['last'] = df.sort_values('date_time', ascending=False).iloc[1]
-        df_described.loc['current'] = df.sort_values('date_time', ascending=False).iloc[0]
+
 
         df_described = df_described[metrics]
 
@@ -470,7 +520,7 @@ class Game():
         # tabular_data = list(map(list, zip(*tabular_data)))
 
         # display(df_described)
-        print(tabulate(tabular_data, headers=[''] + comparisons))
+        print(tabulate(tabular_data, headers=[f'Total games: {total_games}'] + comparisons))
         # # tabular_data
 
 
