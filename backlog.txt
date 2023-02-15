@@ -1,14 +1,21 @@
 Easy / quick:
+* Clean the backlog
 * Change summary_per_game to games_summary
 * The functions of main should be in a separate file in src/ same 'query_db.py' or something
 * Calculate the maximum number of spaces and line break to recommand resizing the window.
 * Add info menu to know what all accronyms mean 
 * set the default config first in case another config doesn't have all parameters
+* propose somewhere in the menu to save the current config and as default or not
+* Change captitalized_words to cap_words
+* make function to clean up config/toml by using default value otherwise.
+* mode to replay the best game to see if with same you can re-beat it. 
+* add 'first' to letters to capitalize
+* if baned word count == -1 then use same sentence as before
 
 
 Medium : 
 * rewrite next_key_pressed
-* Add a game setting to only train one hand or one keyboard row
+* Add a game setting to only train one hand or one keyboard row by filtering the keys to allow
 * check in the analytics each hand and each finger and each row of the keyboard
 * Add two new variable for filtering words based on unique letters in word or how the number of unique letters can be an int
 * the average time for letter (for traini.) need to be on the last xx games and not everything
@@ -26,10 +33,14 @@ Medium :
     * Change words printed
 * Viz 
     * make a chart to that you see the most struggle char over time and how they evolved and changed
+    * for the chart that display the wpm per game, add vertical lines for when there is an error 
+    * find a way to predict the time if the player did 10/30/60% less erros then to that time. 
+    * Classify the errors into weakness, random, etc
 * command to stop the game in game like double enter or something that leads to self.stop_game() 
 * in end game when displaying scores, display also the diff compared to last game not just best/avg
-
-
+* add in the general preference th etype of stats, you can add more or remove more5**2
+* STATS: 
+    * add a criteria so that the metrics/stats are not on all games but also on the past 10 or past 50 so that you can also see evolution
 
 
 Hard / long: 
@@ -39,15 +50,28 @@ Hard / long:
 * Add on Pypi to pip install and with a command to launch it from terminal and homebrew
 * Create a score 
     * https://medium.com/swlh/interpreting-principal-components-fifa20-players-use-case-639fde373bac
+* add a history mode similar to keybr where you train letters one by one ans can't pass the next before the past n average needs to be above the medium speed for all letters or something like that.
 
 
+
+bug: 
+* min/max word length doesn't work
 
 
 
 
 game preference config file: 
-* toggle ui on/off aka display true/false
+* toggle ui on/off aka display true/false for all the elements 
+    * WPM
+    * cps 
+    * words left 
+    * how many words to display
+    * display only next word 
 * 
 
 
 
+checks for rules:
+    * na: use default 
+    * int if > 1 
+    * between 0 and 1 
