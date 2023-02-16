@@ -1,5 +1,7 @@
-import detect_keys as dk
-from query import Query
+import src.detect_keys as dk
+from src.query import Query
+from src.sentence import Sentence
+from src.score import Score
 import time
 import sqlite3
 import toml
@@ -8,14 +10,12 @@ import shutil
 from tabulate import tabulate
 import numpy as np
 import pandas as pd
-from sentence import Sentence
-from score import Score
 from termcolor import colored
 import re
 import sys
 
 
-os.remove('data/main_database.db')
+# os.remove('data/main_database.db')
 
 class Game(): 
     def __init__(self): 
@@ -37,19 +37,27 @@ class Game():
         with open(f'configs/{config}.toml', 'r') as f:
             config = toml.load(f)
 
-        # with open(f'configs/game_default.toml', 'r') as f:
-        #     default_config = toml.load(f)
-        
-        # for key, value in default_config.items(): 
-        #     if key not in config.keys(): 
-        #         config[key] = value 
+        config = self.clean_config(config)
 
-        #     else: 
-        #         config_value = config[key]
-
-        #         if key == 'word_count': 
         return self.conf(config)
 
+
+    def clean_config(self, config):
+        '''Clean the config to make sure that the game can be played
+        '''
+        # Adding rules if not in the config file
+        with open(f'configs/game_default.toml', 'r') as f:
+            default_config = toml.load(f)        
+        for key, value in default_config.items(): 
+            if key not in config.keys(): 
+                config[key] = value 
+        
+
+        
+
+
+
+        return config
 
     def conf(self, config): 
         game_config = config['game_config']
@@ -204,7 +212,7 @@ class Game():
         print('change game config')
 
 
-        self.start_game()
+        self.game_setup()
 
 
 
@@ -223,15 +231,14 @@ class Game():
         print('check_game_config')
 
 
+    def game_setup(self): 
+        print('game_setup')
+        
+
     def start_game(self): 
         self.print_game_config()
         print('Play game', '\n'*20)
 
-        #### this is pregame loading stuff
-        if not self.first_game: 
-            self.game_config['banned_words'] = self.query.npast_games_words(self.game_config['n_games_banned_words'])
-        else:
-            self.game_config['banned_words'] = []
         # Create sentence and score
         self.score = Score( 
             self.game_config,
@@ -243,6 +250,7 @@ class Game():
         sentence = Sentence(
             self.game_config, 
             self.first_game,
+            self.query,
             self.con,
             ).sentence
 
@@ -337,7 +345,7 @@ class Game():
         print('\n'*20)
         # Log game
         game_data = self.game_config
-        del game_data['banned_words']
+        # del game_data['banned_words']
         game_data.update(
             {'sentence': sentence,
              'keys_pressed': keys_pressed,
@@ -345,13 +353,14 @@ class Game():
         )
         self.score.log_game(game_data)
         self.score.summarize_games_scores()
-        if not self.first_game: 
+        try:
+            
             self.compare_game()
-        else:
+        except IndexError:
             df_game_summary = self.score.load_game_stats(self.game_id)
             print('Game summary:')
             print(tabulate(df_game_summary.T))
-        
+         
         # Propose to save on gbg, back to main menu, leaderboard
 
 
@@ -369,14 +378,14 @@ class Game():
         Returns:
             str: The formatted value with color added to it. The color depends on the comparison between `val_to_print` and `val_to_compare`:
                 * Red if `val_to_print` is smaller than `val_to_compare` when `higher_better` is True, or 
-                * Blue if `val_to_print` is equal to `val_to_compare`, or 
-                * Red if `val_to_print` is greater than `val_to_compare` when `higher_better` is False.
+                * Yellow if `val_to_print` is equal to `val_to_compare`, or 
+                * Green if `val_to_print` is greater than `val_to_compare` when `higher_better` is False.
         '''
         sign = 1 if higher_better == True else -1
         if sign * val_to_print < sign * val_to_compare: 
             return colored(val_to_print, 'red')
         elif sign * val_to_print == sign * val_to_compare: 
-            return colored(val_to_print, 'blue')
+            return colored(val_to_print, 'yellow')
         else: 
             return colored(val_to_print, 'green')
 
@@ -386,7 +395,7 @@ class Game():
 
 
     ################
-    # rewrite this 
+    # rewrite this it's terrible
     ################
     def compare_game(self): 
         '''Compare stats of the game '''
@@ -567,7 +576,7 @@ class Game():
 
 
 
-Game()
+# Game()
 
 
 
