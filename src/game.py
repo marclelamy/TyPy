@@ -19,9 +19,9 @@ import sys
 
 class Game(): 
     def __init__(self): 
-        self.wpm_list = [] #code to change for the genrate chart function
         self.game_id = np.random.randint(10**10)
         self.cwd = os.getcwd()
+        self.window_width, self.window_heigh = shutil.get_terminal_size()
         self.check_if_first_game()
         self.available_configs = [file.replace('.toml', '') for file in os.listdir('configs/')]
         self.main_menu()
@@ -38,9 +38,7 @@ class Game():
         with open(f'configs/{config}.toml', 'r') as f:
             config = toml.load(f)
 
-        config = self.clean_config(config)
-
-        return self.conf(config)
+        return self.clean_config(config)
 
 
     def clean_config(self, config):
@@ -52,13 +50,10 @@ class Game():
         for key, value in default_config.items(): 
             if key not in config.keys(): 
                 config[key] = value 
-        
-
-        
-
 
 
         return config
+
 
     def conf(self, config): 
         game_config = config['game_config']
@@ -140,9 +135,14 @@ class Game():
 
         # Reads, sets and print default game confi
         if 'user_default' in self.available_configs:
-            self.game_config = self.read_config('user_default')['game_config']
+            config = self.read_config('user_default')
         else:
-            self.game_config = self.read_config('game_default')['game_config']
+            config = self.read_config('game_default')
+        self.game_config = config['game_config']
+        self.game_preference = config['game_preference']
+
+        print(self.game_config, self.game_preference)
+
         self.print_game_config()
 
         # Choose action
@@ -345,27 +345,32 @@ class Game():
         print('\n' * 20)
         print(chart, end='\r')
 
-    def generate_chart(self, wpm_list, height=20, width=25):
-        df = pd.DataFrame(wpm_list, columns=['wpm'])
-        # Determine the maximum value in the 'wpm' column
-        max_wpm = df['wpm'].max()
+    def generate_chart(self, data, height=20, width=80):
+        # Determine the maximum value in the data
+        max_val = max(data)
 
         # Determine the number of data points to plot
-        num_points = min(len(df), width)
+        num_points = min(len(data), width)
 
         # Determine the x-axis tick interval
         tick_interval = max(1, num_points // 10)
+
+        # Determine the maximum value for the y-axis
+        if len(data) >= height:
+            max_y = max_val
+        else:
+            max_y = data[0]
 
         # Create a list of empty strings to represent each row in the chart
         rows = [' ' * num_points for _ in range(height)]
 
         # Loop over the data points and add an 'x' to the appropriate position in the chart
         for i in range(num_points):
-            # Calculate the index of the DataFrame row to use for this data point
-            index = int(i / num_points * len(df))
+            # Calculate the index of the data point to use for this position
+            index = int(i / num_points * len(data))
 
             # Calculate the y position for this data point
-            y = int(df.iloc[index]['wpm'] / max_wpm * (height - 1))
+            y = int(data[index] / max_y * (height - 1))
 
             # Add the 'x' to the appropriate position in the chart
             rows[height - 2 - y] = rows[height - 2 - y][:i] + 'x' + rows[height - 2 - y][i + 1:]
@@ -375,7 +380,7 @@ class Game():
             if i % (height // 10) == 0:
                 rows[i] = '|' + rows[i][1:]
             else:
-                rows[i] = ' ' + rows[i][1:]
+                rows[i] = '|' + rows[i][1:]
 
         # Add the x-axis ticks to the chart
         for i in range(0, num_points, tick_interval):
@@ -388,7 +393,7 @@ class Game():
         # Convert the list of rows to a single string
         chart = '\n'.join(rows)
         print(chart)
-
+        # return chart
 
         
     def hud(self, display_sentence, words_left, correct_key_count, keys_pressed): 
@@ -396,21 +401,27 @@ class Game():
         '''
         infos_to_print = ''
         # infos_to_print = '\n' * 20
-        infos_to_print += f'Words left to type: {words_left}\n'
+        if self.game_preference['display_words_left'] == True:
+            infos_to_print += f'Words left to type: {words_left}\n'
         if len(keys_pressed) > 1:
             # print(keys_pressed[-1][3],  keys_pressed[0][3])
             wpm = self.wpm(correct_key_count, keys_pressed[-1][3] - keys_pressed[0][3])
             self.wpm_list.append(wpm)
             wpm_formatted = self.color_formatting(round(wpm, 1), self.best_wpm)
-            infos_to_print += f'WPM: {wpm_formatted}\n'
 
-        width, heigh = shutil.get_terminal_size()
+            if self.game_preference['display_wpm'] == True:
+                infos_to_print += f'WPM: {wpm_formatted}\n'
+
+            print('\n' * 20)
+            if self.game_preference['display_chart'] == True:
+                self.generate_chart(self.wpm_list)
+        else: 
+            self.wpm_list = []
+
         infos_to_print += ' ' + ' '.join(display_sentence.split(' '))
-        infos_to_print += ' ' * (width - len(infos_to_print)-10)
+        infos_to_print += ' ' * (self.window_width - len(infos_to_print)-10)
         # print(infos_to_print, '\t'*5, end='\r')
         # print(repr(infos_to_print), '\n'*5)
-        print('\n' * 20)
-        self.generate_chart(self.wpm_list)
         print(infos_to_print)
         # self.print_multine_with_carriage(infos_to_print) # This adds a new line at the end
         # sys.stdout.write(infos_to_print)
