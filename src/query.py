@@ -1,6 +1,6 @@
 import pandas as pd
 import os
-
+import time
 
 
 class Query(): 
@@ -9,7 +9,10 @@ class Query():
         self.cwd = os.getcwd()
 
 
-    def npast_games_words(self, n_past_games):
+    def npast_games_words(self, n_past_games, corpus_size):
+        '''Returns a list of words from the last n games played
+        '''
+
         query_npast_games_words = f'''
             select
                 game_id
@@ -25,6 +28,10 @@ class Query():
 
         df_query = pd.read_sql_query(query_npast_games_words, self.con)
         done_words = ' '.join(df_query['sentence'].unique()).split(' ')
+
+        # if len(set(done_words)) < corpus_size:
+            
+
         return done_words
 
 
