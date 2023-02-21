@@ -19,6 +19,7 @@ import sys
 
 class Game(): 
     def __init__(self): 
+        self.wpm_list = [] #code to change for the genrate chart function
         self.game_id = np.random.randint(10**10)
         self.cwd = os.getcwd()
         self.check_if_first_game()
@@ -315,14 +316,91 @@ class Game():
         print(str, flush=True)
 
 
+    def generate_chart(self, wpm_list):
+        df = pd.DataFrame(wpm_list, columns=['wpm'])
+        # Calculate the maximum value in the 'wpm' column
+        max_wpm = df['wpm'].max()
+
+        # Create a list of empty strings to represent each row in the chart
+        rows = [' ' * len(df) for _ in range(20)]
+
+        # Loop over the rows in the DataFrame and add an 'x' to the appropriate position in the chart
+        for i, row in df.iterrows():
+            # Calculate the y position for this data point
+            y = int(row['wpm'] / max_wpm * 19)
+
+            # Add the 'x' to the appropriate position in the chart
+            rows[19 - y] = rows[19 - y][:i] + 'x' + rows[19 - y][i + 1:]
+
+        # Add the y-axis to the chart
+        for i in range(20):
+            rows[i] = '| ' + rows[i]
+
+        # Add the x-axis to the chart
+        rows.append('+ ' + '-' * len(df) + '\n')
+
+        # Convert the list of rows to a single string
+        chart = '\n'.join(rows)
+
+        print('\n' * 20)
+        print(chart, end='\r')
+
+    def generate_chart(self, wpm_list, height=20, width=25):
+        df = pd.DataFrame(wpm_list, columns=['wpm'])
+        # Determine the maximum value in the 'wpm' column
+        max_wpm = df['wpm'].max()
+
+        # Determine the number of data points to plot
+        num_points = min(len(df), width)
+
+        # Determine the x-axis tick interval
+        tick_interval = max(1, num_points // 10)
+
+        # Create a list of empty strings to represent each row in the chart
+        rows = [' ' * num_points for _ in range(height)]
+
+        # Loop over the data points and add an 'x' to the appropriate position in the chart
+        for i in range(num_points):
+            # Calculate the index of the DataFrame row to use for this data point
+            index = int(i / num_points * len(df))
+
+            # Calculate the y position for this data point
+            y = int(df.iloc[index]['wpm'] / max_wpm * (height - 1))
+
+            # Add the 'x' to the appropriate position in the chart
+            rows[height - 2 - y] = rows[height - 2 - y][:i] + 'x' + rows[height - 2 - y][i + 1:]
+
+        # Add the y-axis ticks to the chart
+        for i in range(height - 1):
+            if i % (height // 10) == 0:
+                rows[i] = '|' + rows[i][1:]
+            else:
+                rows[i] = ' ' + rows[i][1:]
+
+        # Add the x-axis ticks to the chart
+        for i in range(0, num_points, tick_interval):
+            rows[-1] = rows[-1][:i] + '-' + rows[-1][i + 1:]
+            rows[-2] = rows[-2][:i] + str(i) + rows[-2][i + 1 + len(str(i)):]
+
+        # Add the x-axis label to the chart
+        rows[-1] = rows[-1][:-1] + '+'
+
+        # Convert the list of rows to a single string
+        chart = '\n'.join(rows)
+        print(chart)
+
+
+        
     def hud(self, display_sentence, words_left, correct_key_count, keys_pressed): 
         '''What to print during the game
         '''
-        infos_to_print = '\n' * 20
+        infos_to_print = ''
+        # infos_to_print = '\n' * 20
         infos_to_print += f'Words left to type: {words_left}\n'
         if len(keys_pressed) > 1:
             # print(keys_pressed[-1][3],  keys_pressed[0][3])
             wpm = self.wpm(correct_key_count, keys_pressed[-1][3] - keys_pressed[0][3])
+            self.wpm_list.append(wpm)
             wpm_formatted = self.color_formatting(round(wpm, 1), self.best_wpm)
             infos_to_print += f'WPM: {wpm_formatted}\n'
 
@@ -331,6 +409,8 @@ class Game():
         infos_to_print += ' ' * (width - len(infos_to_print)-10)
         # print(infos_to_print, '\t'*5, end='\r')
         # print(repr(infos_to_print), '\n'*5)
+        print('\n' * 20)
+        self.generate_chart(self.wpm_list)
         print(infos_to_print)
         # self.print_multine_with_carriage(infos_to_print) # This adds a new line at the end
         # sys.stdout.write(infos_to_print)

@@ -11,6 +11,7 @@ Easy / quick:
 * mode to replay the best game to see if with same you can re-beat it. 
 * add 'first' to letters to capitalize
 * if baned word count == -1 then use same sentence as before
+* add a random mode picking random values for the rules and game display
 
 
 Medium : 
@@ -31,6 +32,8 @@ Medium :
         * Words left 
         *
     * Change words printed
+* In game display
+    * get the measurement of the window and make the non text red/green depending how you're doing in wpm
 * Viz 
     * make a chart to that you see the most struggle char over time and how they evolved and changed
     * for the chart that display the wpm per game, add vertical lines for when there is an error 
@@ -51,7 +54,7 @@ Hard / long:
 * Create a score 
     * https://medium.com/swlh/interpreting-principal-components-fifa20-players-use-case-639fde373bac
 * add a history mode similar to keybr where you train letters one by one ans can't pass the next before the past n average needs to be above the medium speed for all letters or something like that.
-
+* write tests precommit/github actions?
 
 
 bug: 
