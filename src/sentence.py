@@ -17,13 +17,13 @@ class Sentence():
             self.word_list = self.word_list[:self.game_config['word_count']]
         else: 
             self.word_list = self.get_n_slowest_words()
-        print(f'word_list: {self.word_list}')
+        # print(f'word_list: {self.word_list}')
         self.capitalize_word_list(game_config['capitalized_words'], game_config['capitalized_letters'])
-        print(f'cap: {self.word_list}')
+        # print(f'cap: {self.word_list}')
         self.add_punctuation(game_config['punctuation'], game_config['punctuation_char'])
-        print(f'punc: {self.word_list}')
+        # print(f'punc: {self.word_list}')
         self.sentence = ' '.join(self.word_list)
-        print(f'sentence: {self.sentence}')
+        # print(f'sentence: {self.sentence}')
 
 
 
@@ -52,7 +52,7 @@ class Sentence():
             banned_words = []
 
 
-        print(f'banned words {banned_words}')
+        # print(f'banned words {banned_words}')
         
 
         # Removing non letters characters and words g/l than max/min length
@@ -63,7 +63,7 @@ class Sentence():
 
 
     def filter_word_length(self, all_words, word_length_min, word_length_max): 
-        print(word_length_min)
+        # print(word_length_min)
         return [word for word in all_words if word_length_min <= len(word) <= word_length_max]
 
 
@@ -132,7 +132,7 @@ class Sentence():
 
         # Get score for each word
         word_list = self.load_words(self.game_config['difficulty'])
-        print(f'{min([len(word) for word in word_list]) = } - {len(word_list) = }')
+        # print(f'{min([len(word) for word in word_list]) = } - {len(word_list) = }')
         df_words = pd.DataFrame(word_list, columns=['word'])
 
         # This is supposed to add a weight so that not only least frequent letters are proposed but it's not working
@@ -147,7 +147,7 @@ class Sentence():
 
         # Sort dataframe and pick the top 25 words with at least four letters
         df_words.sort_values('avg_letter_score', ascending=self.game_config['train_easy']).to_csv('word_score.csv', index=False)
-        print(df_words.head(100))
+        # print(df_words.head(100))
         top_n = df_words.sort_values('avg_letter_score', ascending=self.game_config['train_easy'])
         top_n = top_n.iloc[:self.game_config['word_count'], 0]
         return list(top_n)

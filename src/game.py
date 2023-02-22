@@ -24,6 +24,7 @@ class Game():
         self.window_width, self.window_heigh = shutil.get_terminal_size()
         self.check_if_first_game()
         self.available_configs = [file.replace('.toml', '') for file in os.listdir('configs/')]
+        print('\n'*20)
         self.main_menu()
 
 
@@ -131,7 +132,6 @@ class Game():
     def confirm_game_settings_before_game(self): 
         '''Sets the config for the game before launching it.
         '''
-        print('\n'*20)
 
         # Reads, sets and print default game confi
         if 'user_default' in self.available_configs:
@@ -245,8 +245,14 @@ class Game():
             self.game_config,
             self.con)
 
-        try: self.best_wpm = pd.read_sql_query(f'select * from summary_per_game where 1=1 {self.score.general_condition} order by wpm desc limit 1', self.con).loc[0, 'wpm']
-        except: self.best_wpm = 70
+        try: 
+            self.best_wpm = pd.read_sql_query(f'select * from summary_per_game where 1=1 {self.score.general_condition} order by wpm desc limit 1', self.con).loc[0, 'wpm']
+            if self.best_wpm == None: 
+                self.best_wpm == 0
+                self.first_game == True 
+        except: 
+            self.best_wpm = 70
+
 
         sentence = Sentence(
             self.game_config, 
@@ -292,7 +298,6 @@ class Game():
                     correct_key_count += 1
                     break
                 else:
-                    keys_pressed.append([str(guess), correct_key, shift_pressed, time.time(), self.game_id]) 
                     incorrect_key_count += 1
 
         
@@ -402,7 +407,7 @@ class Game():
         infos_to_print = ''
         # infos_to_print = '\n' * 20
         if self.game_preference['display_words_left'] == True:
-            infos_to_print += f'Words left to type: {words_left}\n'
+            infos_to_print += f'{words_left + 1} words left to type\n'
         if len(keys_pressed) > 1:
             # print(keys_pressed[-1][3],  keys_pressed[0][3])
             wpm = self.wpm(correct_key_count, keys_pressed[-1][3] - keys_pressed[0][3])
@@ -453,7 +458,20 @@ class Game():
             print(tabulate(df_game_summary.T))
          
         # Propose to save on gbg, back to main menu, leaderboard
+        
 
+        # What to do after the game    
+        print('\n' * 1)
+        choice = self.propose_menu(question = 'What do you want to do?',
+                                   choices = ['Play again', 'Main menu', f'Change settings'])
+
+        self.game_id = np.random.randint(10**10)
+        if choice == 0: 
+            self.start_game()
+        elif choice == 1: 
+            self.main_menu()
+        elif choice == 2: 
+            self.confirm_game_settings_before_game()
 
 
 
@@ -473,6 +491,7 @@ class Game():
                 * Green if `val_to_print` is greater than `val_to_compare` when `higher_better` is False.
         '''
         sign = 1 if higher_better == True else -1
+        print(val_to_print, sign, val_to_compare)
         if sign * val_to_print < sign * val_to_compare: 
             return colored(val_to_print, 'red')
         elif sign * val_to_print == sign * val_to_compare: 
