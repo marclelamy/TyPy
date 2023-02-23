@@ -11,12 +11,16 @@ class Sentence():
         self.game_config = game_config
         self.first_game = first_game
         self.query = Query
+        self.con = con
 
+        self.word_list = self.load_words(game_config['difficulty'])
         if self.game_config['train'] == False: 
-            self.word_list = self.load_words(game_config['difficulty'])
             self.word_list = self.word_list[:self.game_config['word_count']]
         else: 
-            self.word_list = self.get_n_slowest_words()
+            # self.word_list = self.get_n_slowest_words()
+            self.word_list = self.only_one_letter()
+
+
         # print(f'word_list: {self.word_list}')
         self.capitalize_word_list(game_config['capitalized_words'], game_config['capitalized_letters'])
         # print(f'cap: {self.word_list}')
@@ -38,9 +42,9 @@ class Sentence():
         if difficulty.lower() == 'hard':
             file_path = f'{self.cwd}/data/text/hard_words.txt'
         elif difficulty.lower() == 'easy':
-            file_path = f'{self.cwd}/data/text/google_most_used_words.txt'
+            file_path = f'{self.cwd}/data/text/common.txt'
         elif difficulty.lower() == 'medium':
-            file_path = f'{self.cwd}/data/text/common_words.txt'
+            file_path = f'{self.cwd}/data/text/google_most_used_words.txt'
             
         with open(file_path) as file: 
             all_words = file.read().split('\n')
@@ -131,9 +135,8 @@ class Sentence():
         key_score = dict(zip(df_keytime['following_key'], df_keytime['time_diff'].round(4)))
 
         # Get score for each word
-        word_list = self.load_words(self.game_config['difficulty'])
         # print(f'{min([len(word) for word in word_list]) = } - {len(word_list) = }')
-        df_words = pd.DataFrame(word_list, columns=['word'])
+        df_words = pd.DataFrame(self.word_list, columns=['word'])
 
         # This is supposed to add a weight so that not only least frequent letters are proposed but it's not working
         # all_words_letters = ''.join(df_words['word'])
@@ -151,3 +154,45 @@ class Sentence():
         top_n = df_words.sort_values('avg_letter_score', ascending=self.game_config['train_easy'])
         top_n = top_n.iloc[:self.game_config['word_count'], 0]
         return list(top_n)
+    
+
+
+    def only_one_letter(self): 
+        query = '''
+
+
+        with tbl1 as (
+        select
+            key
+            , lead(key) over(partition by game_id order by game_id, time) following_key
+            , time
+            , lead(time) over(partition by game_id order by game_id, time) following_time
+            , game_id
+
+        from keys_pressed
+        where 1=1
+            and correct_key = 1
+            and game_id > 100
+        )
+
+        select 
+            following_key
+            , avg(following_time - time) as time_diff
+            , count(*) count
+
+        from tbl1
+        where 1=1
+            and following_key is not null
+        group by 1
+        having 1=1
+            -- and count > 100
+        order by time_diff asc
+
+
+        '''
+
+
+
+        letter = pd.read_sql_query(query, self.con).sort_values('time_diff', ascending=False).query('following_key.str.lower().str.isalpha() and following_key.str.lower() == following_key and following_key.str.len() == 1').iloc[0, 0]
+
+        print(self.word_list, letter)
