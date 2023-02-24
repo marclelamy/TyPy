@@ -17,8 +17,8 @@ class Sentence():
         if self.game_config['train'] == False: 
             self.word_list = self.word_list[:self.game_config['word_count']]
         else: 
-            # self.word_list = self.get_n_slowest_words()
-            self.word_list = self.only_one_letter()
+            # self.word_list = self.get_n_slowest_words(self.word_list)
+            self.word_list = self.only_one_letter(self.word_list)
 
 
         # print(f'word_list: {self.word_list}')
@@ -42,7 +42,7 @@ class Sentence():
         if difficulty.lower() == 'hard':
             file_path = f'{self.cwd}/data/text/hard_words.txt'
         elif difficulty.lower() == 'easy':
-            file_path = f'{self.cwd}/data/text/common.txt'
+            file_path = f'{self.cwd}/data/text/common_words.txt'
         elif difficulty.lower() == 'medium':
             file_path = f'{self.cwd}/data/text/google_most_used_words.txt'
             
@@ -50,8 +50,11 @@ class Sentence():
             all_words = file.read().split('\n')
 
 
-        if not self.first_game: 
-            banned_words = self.query.npast_games_words(self.game_config['n_games_banned_words'], len(all_words))
+        if self.first_game == False or self.game_config['train'] == False: 
+            try: 
+                banned_words = self.query.npast_games_words(self.game_config['n_games_banned_words'], len(all_words))
+            except:
+                banned_words = []
         else:
             banned_words = []
 
@@ -119,7 +122,7 @@ class Sentence():
         np.random.shuffle(self.word_list)
 
 
-    def get_n_slowest_words(self):
+    def get_n_slowest_words(self, word_list):
         '''Among the list of word, find the words that would 
         potentially take the longest to type based on the 
         average duration it takes to the player to type all 
@@ -136,7 +139,7 @@ class Sentence():
 
         # Get score for each word
         # print(f'{min([len(word) for word in word_list]) = } - {len(word_list) = }')
-        df_words = pd.DataFrame(self.word_list, columns=['word'])
+        df_words = pd.DataFrame(word_list, columns=['word'])
 
         # This is supposed to add a weight so that not only least frequent letters are proposed but it's not working
         # all_words_letters = ''.join(df_words['word'])
@@ -157,7 +160,7 @@ class Sentence():
     
 
 
-    def only_one_letter(self): 
+    def only_one_letter(self, word_list): 
         query = '''
 
 
@@ -191,8 +194,21 @@ class Sentence():
 
         '''
 
+        df = pd.read_sql_query(query, self.con).sort_values('time_diff', ascending=False).query('following_key.str.lower().str.isalpha() and following_key.str.lower() == following_key and following_key.str.len() == 1')
+        print(df.head())
+        letter = df.iloc[0, 0]
+        voyelle = df.query('following_key.str.contains("a|e|i|o|u|y")').iloc[0, 0]
 
+        letter_count = {}
+        for word in word_list:
+            letter_count[word] = int(np.ceil(word.count(letter) + word.count(voyelle)/3)) #/3 is a weight so it does't count as much as a letter. In testing
 
-        letter = pd.read_sql_query(query, self.con).sort_values('time_diff', ascending=False).query('following_key.str.lower().str.isalpha() and following_key.str.lower() == following_key and following_key.str.len() == 1').iloc[0, 0]
+        freq = dict(sorted(letter_count.items(), key=lambda item: item[1], reverse=True))
+        freq = {k: v for k, v in freq.items() if v > 0}
+        word_list = [word for word, count in freq.items() for x in range(count)]
+        
+        total_weights = sum(freq.values())
+        probas = [weight/total_weights for weight in freq.values()]
+        word_list = np.random.choice(list(freq.keys()), self.game_config['word_count'], False, probas)
 
-        print(self.word_list, letter)
+        return list(word_list)
