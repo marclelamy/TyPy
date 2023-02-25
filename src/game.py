@@ -244,6 +244,11 @@ class Game():
         self.score = Score( 
             self.game_config,
             self.con)
+        if self.score.gamecount == 0: 
+            self.first_game = True
+
+
+
 
         try: 
             self.best_wpm = pd.read_sql_query(f'select * from summary_per_game where 1=1 {self.score.general_condition} order by wpm desc limit 1', self.con).loc[0, 'wpm']
@@ -423,7 +428,10 @@ class Game():
         else: 
             self.wpm_list = []
 
-        infos_to_print += ' ' + ' '.join(display_sentence.split(' '))
+
+        width, height = shutil.get_terminal_size()
+        infos_to_print += ' ' + ' '.join(display_sentence.split(' '))[:width - 1]
+        # infos_to_print += ' ' + ' '.join(display_sentence.split(' '))
         infos_to_print += ' ' * (self.window_width - len(infos_to_print)-10)
         # print(infos_to_print, '\t'*5, end='\r')
         # print(repr(infos_to_print), '\n'*5)
