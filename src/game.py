@@ -449,10 +449,9 @@ class Game():
         )
         self.score.log_game(game_data)
         self.score.summarize_games_scores()
-        try:
-            
+        if self.first_game == False:
             self.compare_game()
-        except IndexError:
+        else:
             df_game_summary = self.score.load_game_stats(self.game_id)
             print('Game summary:')
             print(tabulate(df_game_summary.T))
@@ -466,6 +465,7 @@ class Game():
                                    choices = ['Play again', 'Main menu', f'Change settings'])
 
         self.game_id = np.random.randint(10**10)
+        self.first_game = False
         if choice == 0: 
             self.start_game()
         elif choice == 1: 
