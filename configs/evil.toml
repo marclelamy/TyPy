@@ -1,7 +1,4 @@
 [game_config]
-
-
-[game_settings]
 word_count = 100 # How many words to be proposed in the game
 min_word_length = 25 # Minimum length of words
 max_word_length = 1000 # Maximum length of words
@@ -12,4 +9,3 @@ force_shift = 0 # Force to type the right shift of the keyboard
 hard_mode = -1 # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed. -1 is for top 10.000 most used 
 train_letters = 0 
 train_letters_easy_mode = 0 # true for this will proposed most optimal words to type fast and beat records
-player_name = 'marc'

@@ -11,4 +11,3 @@ difficulty = 'Medium' # For hard mode, less common and longer words like 'hydroc
 n_games_banned_words = 100 # The words used in the past n games won't be proposed
 train = true 
 train_easy = false # true for this will proposed most optimal words to type fast and beat records
-player_name = 'marc'

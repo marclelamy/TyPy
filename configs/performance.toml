@@ -9,4 +9,3 @@ force_shift = 0 # Force to type the right shift of the keyboard
 difficulty = 'Easy' # For hard mode, less common and longer words like 'hydrocharitaceous' are proposed. -1 is for top 10.000 most used 
 train = 1
 train_easy = 1 # true for this will proposed most optimal words to type fast and beat records
-player_name = 'marc'
