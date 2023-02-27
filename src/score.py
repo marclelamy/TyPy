@@ -7,8 +7,9 @@ import pandas as pd
 
 
 class Score(): 
-    def __init__(self, game_config, con):
+    def __init__(self, game_config, first_game, con):
         self.game_config = game_config
+        self.first_game = first_game
         self.con = con
         
         self.make_condition()
@@ -30,13 +31,17 @@ class Score():
                  'train': 'int', 
                  'train_easy': 'int'}
         for rule, type in rules.items(): 
-            if type == 'str': 
+            if isinstance(self.game_config[rule], str): 
                 self.general_condition += f' AND {rule} = "{self.game_config[rule]}" '
             else: 
                 self.general_condition += f' AND {rule} = {self.game_config[rule]} '
 
+        if self.first_game == False:
+            self.gamecount = pd.read_sql_query(f'select * from clean_games_settings where 1 = 1 {self.general_condition}', self.con).shape[0]
+        else: 
+            self.gamecount = 0
 
-        print(self.general_condition)
+        # print(self.general_condition)
 
 
 
@@ -116,7 +121,7 @@ class Score():
             """
 
         df_high_score = pd.read_sql_query(query, self.con)
-        df_high_score.to_sql('summary_per_game', self.con, if_exists='replace', index=False)
+        df_high_score.to_sql('games_summary', self.con, if_exists='replace', index=False)
 
 
     
@@ -136,7 +141,7 @@ class Score():
             , keys_pressed - keys_to_press as errors
             --, round(cps, 4) as cps
         
-        from summary_per_game 
+        from games_summary 
         where 1=1
             and game_id = {game_id} 
         '''
@@ -157,7 +162,7 @@ class Score():
             --, round(cps, 4) as cps
             , word_count
         
-        from summary_per_game 
+        from games_summary 
         where 1=1
             and game_id = {self.game_id} 
             and word_count = {self.word_count}
@@ -218,7 +223,7 @@ class Score():
 #                     , wpm
 #                     , score
 
-#                 FROM summary_per_game
+#                 FROM games_summary
 #                 WHERE 1=1
 #                     {condition}
 #                 """
@@ -240,7 +245,7 @@ class Score():
 #         query = f"""
 #             SELECT 
 #                 * 
-#             FROM summary_per_game
+#             FROM games_summary
 #             WHERE 1=1
 #                 {full_condition}
 #             ORDER BY {sort_by}
@@ -270,7 +275,7 @@ class Score():
 #                 , wpm
 #                 , score
 
-#             FROM summary_per_game
+#             FROM games_summary
 #             WHERE 1=1
 #                 {full_condition}
 #             """
@@ -297,7 +302,7 @@ class Score():
 #             SELECT 
 #                 *
 
-#             FROM summary_per_game
+#             FROM games_summary
 #             WHERE 1=1
 #                 {full_condition}
 #             """
