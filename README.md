@@ -1,4 +1,4 @@
-<!-- ![](https://github.com/marclelamy/pyTypeFast/blob/main/game_demo.gif) -->
+![](https://github.com/marclelamy/pyTypeFast/blob/main/game_demo.gif)
 
 
 
