@@ -78,13 +78,16 @@ class Sentence():
         words_to_cap = capitalized_words if capitalized_words > 1 else int(len(self.word_list) * capitalized_words)
 
         for index, word in enumerate(self.word_list[:words_to_cap]): 
-            # Generate a list of n numbers, suffle it and keep the indexes >= to the number of letters to cap
-            random_list = list(range(len(word)))
-            np.random.shuffle(random_list)
-            letters_to_cap = capitalized_letters if capitalized_letters > 1 else round(len(word) * capitalized_letters)
-            print(words_to_cap, letters_to_cap, len(word) * capitalized_letters)
-            random_list = random_list[:letters_to_cap]
-            self.word_list[index] = ''.join([char.upper() if index_char in random_list else char for index_char, char in enumerate(word)])
+            if capitalized_letters == "First":
+                self.word_list[index] = word.title()
+            else:
+                # Generate a list of n numbers, suffle it and keep the indexes >= to the number of letters to cap
+                random_list = list(range(len(word)))
+                np.random.shuffle(random_list)
+                letters_to_cap = capitalized_letters if capitalized_letters > 1 else round(len(word) * capitalized_letters)
+                # print(words_to_cap, letters_to_cap, len(word) * capitalized_letters)
+                random_list = random_list[:letters_to_cap]
+                self.word_list[index] = ''.join([char.upper() if index_char in random_list else char for index_char, char in enumerate(word)])
         
         np.random.shuffle(self.word_list)
 
@@ -164,7 +167,26 @@ class Sentence():
         query = '''
 
 
-        with tbl1 as (
+        with kp as (
+        select 
+            distinct
+            key
+            , time
+            , correct_key
+            , game_id
+            , row_number() over(partition by key order by time desc) as key_index
+            
+
+        from keys_pressed 
+        where 1=1
+            and time is not null
+        order by time
+        )
+
+
+
+
+        , tbl1 as (
         select
             key
             , lead(key) over(partition by game_id order by game_id, time) following_key
@@ -172,10 +194,11 @@ class Sentence():
             , lead(time) over(partition by game_id order by game_id, time) following_time
             , game_id
 
-        from keys_pressed
+        from kp
         where 1=1
             and correct_key = 1
             and game_id > 100
+            and key_index < 200
         )
 
         select 
@@ -201,7 +224,7 @@ class Sentence():
 
         letter_count = {}
         for word in word_list:
-            letter_count[word] = int(np.ceil(word.count(letter) + word.count(voyelle)/3)) #/3 is a weight so it does't count as much as a letter. In testing
+            letter_count[word] = word.count(letter) #int(np.ceil(word.count(letter) + word.count(voyelle)/3)) #/3 is a weight so it does't count as much as a letter. In testing
 
         freq = dict(sorted(letter_count.items(), key=lambda item: item[1], reverse=True))
         freq = {k: v for k, v in freq.items() if v > 0}
