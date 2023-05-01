@@ -1,5 +1,5 @@
 import src.detect_keys as dk
-from src.query import Query
+from src.query import query_table
 from src.sentence import Sentence
 from src.score import Score
 import time
@@ -14,24 +14,29 @@ from termcolor import colored
 import re
 import sys
 
+print('suuuuu')
 
-# os.remove('data/main_database.db')
+cwd = os.getcwd()
+try: os.remove(f'{cwd}/data/main_database.db')
+except: pass
+
+
+
+def update_terminal(): 
+    os.system('cls' if os.name == 'nt' else 'clear')
+
 
 class Game(): 
     def __init__(self): 
         self.game_id = np.random.randint(10**10)
-        self.cwd = os.getcwd()
-        self.window_width, self.window_heigh = shutil.get_terminal_size()
-        self.check_if_first_game()
+        self.window_width, self.window_height = shutil.get_terminal_size()
+        self.create_or_load_database()
         self.available_configs = [file.replace('.toml', '') for file in os.listdir('configs/')]
         print('\n'*20)
         self.main_menu()
 
 
-        # Set the name of the player name 
-            # N - set yout name 
-            # D - default (you become npc)
-        #########
+
     # @staticmethod
     def read_config(self, config='game_default') -> dict: 
         '''Given a config file name, reads it and return a dictionary
@@ -52,7 +57,6 @@ class Game():
             if key not in config.keys(): 
                 config[key] = value 
 
-
         return config
 
 
@@ -66,66 +70,87 @@ class Game():
         return config
 
 
-    def check_if_first_game(self): 
+    def create_or_load_database(self): 
         '''Create the two tables of the database
         '''
 
-        if os.path.exists('data/main_database.db'):
-            self.con = sqlite3.connect('data/main_database.db')
-            if pd.read_sql_query('select * from keys_pressed', self.con).empty: 
-                self.first_game = True
-            else: 
-                self.first_game = False
-        else:
+        # if os.path.exists('data/main_database.db'):
+        #     self.con = sqlite3.connect('data/main_database.db')
+        #     if pd.read_sql_query('select * from keys_pressed', self.con).empty: 
+        #         self.first_game = True
+        #     else: 
+        #         self.first_game = False
+        # else:
+        #     self.first_game = True
+        self.con = sqlite3.connect(f'{cwd}/data/main_database.db')
+
+        keys_pressed = '''
+        CREATE TABLE IF NOT EXISTS keys_pressed (
+        key TEXT,
+        correct_key INTEGER,
+        shift TEXT,
+        time REAL,
+        game_id INTEGER,
+        game_settings TEXT
+        )'''
+        games_settings = '''
+        CREATE TABLE IF NOT EXISTS games_settings (
+        game_id INTEGER,
+        game_settings TEXT
+        )'''
+
+        for query in [keys_pressed, games_settings]: 
+            self.con.execute(query)
+
+        if pd.read_sql_query('select * from keys_pressed', self.con).empty: 
             self.first_game = True
-            self.con = sqlite3.connect('data/main_database.db')
+        else: 
+            self.first_game = False
 
-            keys_pressed = '''
-            CREATE TABLE IF NOT EXISTS keys_pressed (
-            key TEXT,
-            correct_key INTEGER,
-            shift TEXT,
-            time REAL,
-            game_id INTEGER,
-            game_settings TEXT
-            )'''
-
-            games_settings = '''
-            CREATE TABLE IF NOT EXISTS games_settings (
-            game_id INTEGER,
-            game_settings TEXT
-            )'''
-
-            for query in [keys_pressed, games_settings]: 
-                self.con.execute(query)
-
-        self.query = Query(self.con)
-
-        if self.first_game: 
-            pass
-            # with open(self.cwd + "/configs/game_default.toml", "w") as f:
-            #     print(self.cwd + "/configs/game_default.toml")
-            #     data = toml.load(f)
-            #     player_name = input('How should we call you?')
-            #     data["player_name"] = player_name
-            #     toml.dump(data, f)
 
     
+    def propose_menu(self, question: list, choices: dict, nwait_enter=False) -> int:
+        '''Print a new menu with question/answers with key pressed
+        
+        parameters 
+        ----------
+        question str: question to ask to the player
+        choices list: list of choices fo the user to answer 
+        
+        returns
+        ----------
+        Index of the list corresponding to the choice of the user
+        '''
+        # Show question with answers to user
+        menu = '\n' + question
+        for key, choice in choices.items(): 
+            menu += f'\n\t{key} - {choice}'
+        menu += '\n'
+        print(menu)
+
+        # Get user input and check 
+        user_input = ''
+        while user_input not in choices.keys(): 
+            user_input = dk.next_key_pressed()[0].upper()
+            print(f'Wrong letter, you pressed {user_input} but it\' not in {list(choices.keys())}. Press again.')
+        return list(choices.keys()).index(user_input)
 
 
     def main_menu(self): 
         '''Menu players see when playing the game.
         '''
-        print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nWelcome to pyFastType!\n')
+        print('\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nWelcome to TyPy!\n')
         print('Please dont use your mouse but only keyboard keys when prompt too to keep the window active or it wont detect your key presses afterwards.\nHave fun!\n\n')
         choice = self.propose_menu(question = 'Press the letter on the left to navigate through the menu:',
-                                   choices = ['Play game', 'Leaderboard', 'Settings'])
-
-        {
-            0: self.confirm_game_settings_before_game,
-            1: self.global_preference,
-            2: self.leaderboard
-        }[choice]()
+                                   choices = {'P': 'Play game', 
+                                              'L': 'Leaderboard', 
+                                              'S': 'Settings'})
+        if choice == 0: 
+            self.confirm_game_settings_before_game()
+        elif choice == 1: 
+            self.global_preference()
+        elif choice == 2: 
+            self.leaderboard()
 
 
 
@@ -147,7 +172,9 @@ class Game():
 
         # Choose action
         choice = self.propose_menu(question = 'Do you wanna change Any?',
-                                   choices = ['yes', 'no, play the game', f'Quick change'])
+                                   choices = {'Y': 'Yes', 
+                                              'N': 'No, play the game', 
+                                              'Q': f'Quick change'})
 
         if choice == 0: 
             self.change_game_config()
@@ -197,9 +224,6 @@ class Game():
         game_config_tabulate_basic = [[rule.capitalize().replace('_', ' '), value] for rule, value in self.game_config.items()]
         print(tabulate(game_config_tabulate_basic, headers=['Rule', 'Value'], showindex=True))
 
-        
-
-
 
     def change_game_config(self):
         '''
@@ -222,8 +246,6 @@ class Game():
 
 
 
-
-
     def leaderboard(self):
         print('Leaderboard')
 
@@ -236,89 +258,12 @@ class Game():
         print('game_setup')
         
 
-    def start_game(self): 
-        self.print_game_config()
-        print('Play game', '\n'*20)
-
-        # Create sentence and score
-        self.score = Score( 
-            self.game_config,
-            self.con)
-        if self.score.gamecount == 0: 
-            self.first_game = True
-
-
-
-
-        try: 
-            self.best_wpm = pd.read_sql_query(f'select * from summary_per_game where 1=1 {self.score.general_condition} order by wpm desc limit 1', self.con).loc[0, 'wpm']
-            if self.best_wpm == None: 
-                self.best_wpm == 0
-                self.first_game == True 
-        except: 
-            self.best_wpm = 70
-
-
-        sentence = Sentence(
-            self.game_config, 
-            self.first_game,
-            self.query,
-            self.con,
-            ).sentence
-
-
-        #### here really starts the game
-
-        # self.best_score = Score().best_scores(self.config) # best game for each of the rules or only for one? i think the best score for each of the rules. This function in Score() could calculate for each of the rules the best, avg (describe() type) and would return what would be in the dictionary/parameters of the function
-        keys_pressed = []
-        correct_key_count, incorrect_key_count = 0, 0
-        sentence_to_display = sentence
-        for index, letter_to_type in enumerate(sentence):
-            if letter_to_type == ' ': 
-                letter_to_type = 'space'
-
-            
-            # Show infos 
-            # Find how to call the ui video games 
-            self.hud(
-                sentence_to_display,
-                words_left = sentence_to_display.count(' '),
-                correct_key_count = correct_key_count,
-                keys_pressed = keys_pressed,
-            )
-
-
-            # Check guess 
-            while True: 
-                guess, shift_pressed = dk.next_key_pressed()
-                correct_key = guess == letter_to_type
-                keys_pressed.append([str(guess), correct_key, shift_pressed, time.time(), self.game_id]) 
-
-                # check fo shift 
-                # if self.force_shift == True and 
-
-
-                if correct_key: 
-                    sentence_to_display = sentence_to_display[1:]
-                    correct_key_count += 1
-                    break
-                else:
-                    incorrect_key_count += 1
-
-        
-        # End game
-        print(keys_pressed)
-        self.end_game(
-            sentence, 
-            keys_pressed
-        )
-
-
 
     @staticmethod
     def wpm(key_count, seconds): 
         return key_count / seconds * 60 / 5
     
+
     @staticmethod
     def print_multine_with_carriage(str): 
         lines_count = str.count('\n') + 1
@@ -354,6 +299,7 @@ class Game():
 
         print('\n' * 20)
         print(chart, end='\r')
+
 
     def generate_chart(self, data, height=20, width=80):
         # Determine the maximum value in the data
@@ -406,13 +352,13 @@ class Game():
         # return chart
 
         
-    def hud(self, display_sentence, words_left, correct_key_count, keys_pressed): 
+    def hud(self, sentence_to_display, correct_key_count, keys_pressed): 
         '''What to print during the game
         '''
+
+
         infos_to_print = ''
-        # infos_to_print = '\n' * 20
-        if self.game_preference['display_words_left'] == True:
-            infos_to_print += f'{words_left + 1} words left to type\n'
+        # infos_to_print = '\n' * self.window_height
         if len(keys_pressed) > 1:
             # print(keys_pressed[-1][3],  keys_pressed[0][3])
             wpm = self.wpm(correct_key_count, keys_pressed[-1][3] - keys_pressed[0][3])
@@ -422,23 +368,104 @@ class Game():
             if self.game_preference['display_wpm'] == True:
                 infos_to_print += f'WPM: {wpm_formatted}\n'
 
-            print('\n' * 20)
+            # print('\n' * self.window_height)
             if self.game_preference['display_chart'] == True:
                 self.generate_chart(self.wpm_list)
         else: 
             self.wpm_list = []
 
+        if self.game_preference['display_words_left'] == True:
+            words_left = sentence_to_display.count(' ')
+            infos_to_print += f'{words_left + 1} words left to type\n'
 
-        width, height = shutil.get_terminal_size()
-        infos_to_print += ' ' + ' '.join(display_sentence.split(' '))[:width - 1]
-        # infos_to_print += ' ' + ' '.join(display_sentence.split(' '))
-        infos_to_print += ' ' * (self.window_width - len(infos_to_print)-10)
+        infos_to_print += ' ' + ' '.join(sentence_to_display.split(' '))[:self.window_width - 1]
+        # infos_to_print += ' ' + ' '.join(sentence_to_display.split(' '))
+        infos_to_print += ' ' * (self.window_width - len(infos_to_print)-10) 
         # print(infos_to_print, '\t'*5, end='\r')
         # print(repr(infos_to_print), '\n'*5)
+        update_terminal()
         print(infos_to_print)
         # self.print_multine_with_carriage(infos_to_print) # This adds a new line at the end
         # sys.stdout.write(infos_to_print)
         
+
+
+    def start_game(self): 
+        self.print_game_config()
+        print('Play game', '\n' * self.window_height)
+
+        # Create sentence and score
+        self.score = Score( 
+            self.game_config,
+            self.first_game,
+            self.con)
+        
+        # Check if first game with those game particular settings
+        try: 
+            game_count = query_table(self.con, 'clean_games_settings', self.score.general_condition).shape[0]
+            if game_count == 0: 
+                self.first_game = True
+        except pd.errors.DatabaseError: 
+            self.first_game = True
+
+
+        # Get best wpm
+        try: 
+            self.best_wpm = pd.read_sql_query(f'select * from games_summary where 1=1 {self.score.general_condition} order by wpm desc limit 1', self.con).loc[0, 'wpm']
+            if self.best_wpm == None: 
+                self.best_wpm == 0
+                self.first_game == True 
+        except: 
+            self.best_wpm = 70
+
+        
+        # Generate sentence
+        sentence = Sentence(
+            self.game_config, 
+            self.first_game,
+            self.con,
+            ).sentence
+
+
+        #####################################
+        #### Here really starts the game ####
+        #####################################
+
+        # self.best_score = Score().best_scores(self.config) # best game for each of the rules or only for one? i think the best score for each of the rules. This function in Score() could calculate for each of the rules the best, avg (describe() type) and would return what would be in the dictionary/parameters of the function
+        keys_pressed = []
+        correct_key_count, incorrect_key_count = 0, 0
+        sentence_to_display = sentence
+        for letter_to_type in sentence:
+            # Refresh HUD
+            self.hud(
+                sentence_to_display,
+                correct_key_count = correct_key_count,
+                keys_pressed = keys_pressed,
+            )
+
+            # As long as the correct key is not typed
+            while True: 
+                guess, shift_pressed = dk.next_key_pressed()
+                correct_key = guess == letter_to_type
+                keys_pressed.append([str(guess), correct_key, shift_pressed, time.time(), self.game_id]) 
+
+                # check opposite/right shift
+
+
+                if correct_key: 
+                    sentence_to_display = sentence_to_display[1:]
+                    correct_key_count += 1
+                    break # The while loop
+                else:
+                    incorrect_key_count += 1
+
+        
+        # End game
+        self.end_game(
+            sentence, 
+            keys_pressed
+        )
+
 
 
 
@@ -449,14 +476,14 @@ class Game():
         print('\n'*20)
         # Log game
         game_data = self.game_config
-        # del game_data['banned_words']
         game_data.update(
             {'sentence': sentence,
              'keys_pressed': keys_pressed,
              'game_id': self.game_id}
         )
         self.score.log_game(game_data)
-        self.score.summarize_games_scores()
+
+        self.score.summarize_games_scores(self.con)
         if self.first_game == False:
             self.compare_game()
         else:
@@ -470,7 +497,9 @@ class Game():
         # What to do after the game    
         print('\n' * 1)
         choice = self.propose_menu(question = 'What do you want to do?',
-                                   choices = ['Play again', 'Main menu', f'Change settings'])
+                                   choices = {'P': 'Play again', 
+                                              'M': 'Main menu', 
+                                              'C': f'Change settings'})
 
         self.game_id = np.random.randint(10**10)
         self.first_game = False
@@ -499,7 +528,7 @@ class Game():
                 * Green if `val_to_print` is greater than `val_to_compare` when `higher_better` is False.
         '''
         sign = 1 if higher_better == True else -1
-        print(val_to_print, sign, val_to_compare)
+        # print(val_to_print, sign, val_to_compare)
         if sign * val_to_print < sign * val_to_compare: 
             return colored(val_to_print, 'red')
         elif sign * val_to_print == sign * val_to_compare: 
@@ -512,8 +541,11 @@ class Game():
     #     return pd.read_sql_query(query', self.con)
 
 
+
+
+
     ################
-    # rewrite this it's terrible
+    # rewrite compare_game() it's terrible
     ################
     def compare_game(self): 
         '''Compare stats of the game '''
@@ -530,7 +562,7 @@ class Game():
         #     --, round(cps, 4) as cps
         #     , word_count
         
-        # from summary_per_game 
+        # from games_summary 
         # where 1=1
         #     and game_id = {self.game_id} 
         # '''
@@ -543,7 +575,7 @@ class Game():
         variation = True
 
         general_condition = self.score.general_condition
-        df = pd.read_sql_query(f'select * from summary_per_game where 1=1 {general_condition}', self.con)
+        df = pd.read_sql_query(f'select * from games_summary where 1=1 {general_condition}', self.con)
         total_games = len(df)
 
         df_described = df.describe(include='all')
@@ -652,77 +684,3 @@ class Game():
 
 
 
-
-
-    def propose_menu(self, question: list, choices: list, nwait_enter=False) -> int:
-        '''Print a new menu with question/answers with key pressed
-        
-        parameters 
-        ----------
-        question str: question to ask to the player
-        choices list: list of choices fo the user to answer 
-        
-        returns
-        ----------
-        Index of the list corresponding to the choice of the user
-        '''
-
-        print('\n')
-        print(question.capitalize())
-        choices_first_letter = []
-        for choice in choices: 
-            print(f'\t{choice[0].upper()} - {choice.capitalize()}')
-            choices_first_letter.append(choice[0].lower())
-        print('\n')
-
-        key = dk.next_key_pressed()[0].lower()
-
-        if key not in choices_first_letter: 
-            print('Wrong letter, press again.')
-            self.propose_menu(question, choices)
-        else:
-            return choices_first_letter.index(key)
-
-
-
-
-
-
-
-
-    # def global_game
-
-
-
-# Game()
-
-
-
-
-# def main():
-#     print('Welcome to the game, choose a menu (type the letter on the left):\n\tP - Play game\n\tS - Settings\n')    
-#     key = dk.next_key_pressed()[0]
-
-
-#     if key == 'p': 
-#         start_game()
-#     elif key == 'S':
-#         settings()
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# main()

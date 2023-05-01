@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-
+from src.query import query_table
 
 
 
@@ -11,7 +11,6 @@ class Score():
         self.game_config = game_config
         self.first_game = first_game
         self.con = con
-        
         self.make_condition()
 
 
@@ -36,11 +35,6 @@ class Score():
             else: 
                 self.general_condition += f' AND {rule} = {self.game_config[rule]} '
 
-        if self.first_game == False:
-            self.gamecount = pd.read_sql_query(f'select * from clean_games_settings where 1 = 1 {self.general_condition}', self.con).shape[0]
-        else: 
-            self.gamecount = 0
-
         # print(self.general_condition)
 
 
@@ -52,35 +46,38 @@ class Score():
     def log_game(self, game_data): 
         '''Save the data produced during the games
         '''
-        # Saving keys
+        # Saving keys strokes
         column_names = ['key', 'correct_key', 'shift', 'time', 'game_id']
-        # print(game_data)
-        # print(game_data['keys_pressed'])
         df_keys = pd.DataFrame(game_data['keys_pressed'], columns=column_names)
         df_keys.to_sql('keys_pressed', self.con, if_exists='append', index=False)
 
-        # Saving ame settings
+        # Saving game settings
         column_names = ['game_id', 'game_settings']
-        # game_settings_lst = [game_settings['game_id'], str({key:value if key != 'game_id'game_settings})]
         game_id = game_data['game_id']
         del game_data['game_id']
         del game_data['keys_pressed']
-        # print(game_data)
-        self.df_game_data = pd.DataFrame([[game_id, str(game_data)]], columns=column_names)
-        self.df_game_data.to_sql('games_settings', self.con, if_exists='append', index=False)
+        df_game_data = pd.DataFrame([[game_id, str(game_data)]], columns=column_names)
+        df_game_data.to_sql('games_settings', self.con, if_exists='append', index=False)
 
-        self.clean_games_settings()
+        # Explode dictionary
+        self.clean_games_settings(self.con, game_id)
 
-    def clean_games_settings(self):
-        '''Explodes the 
+
+    @staticmethod
+    def clean_games_settings(con, game_id: int):
+        '''Explodes the dictionary of the last game and insert it into the 
+        clean table
         '''
-        df_games_settings = pd.read_sql_query('select distinct * from games_settings', self.con)
-        df_clean_games_settings = df_games_settings['game_settings'].apply(lambda x: pd.Series(eval(x)))
-        df_clean_games_settings.insert(0, 'game_id', df_games_settings['game_id'])
-        df_clean_games_settings.to_sql('clean_games_settings', self.con, if_exists='replace', index=False)
+
+        df_current_game_settings = query_table(con, 'games_settings', f'and game_id = {game_id}')
+        df_current_clean_games_settings = df_current_game_settings['game_settings'].apply(lambda x: pd.Series(eval(x)))
+        df_current_clean_games_settings.insert(0, 'game_id', df_current_game_settings.loc[0, 'game_id'])
+        df_current_clean_games_settings.to_sql('clean_games_settings', con, if_exists='insert', index=False)
     
 
-    def summarize_games_scores(self): 
+
+    @staticmethod
+    def summarize_games_scores(con): 
         query = f"""
             select
                 distinct
@@ -116,12 +113,13 @@ class Score():
             from keys_pressed kp 
             left join clean_games_settings cgs using(game_id)
             where 1=1
+
             group by 1
             order by maxdatetime_unix asc
             """
 
-        df_high_score = pd.read_sql_query(query, self.con)
-        df_high_score.to_sql('games_summary', self.con, if_exists='replace', index=False)
+        df_high_score = pd.read_sql_query(query, con)
+        df_high_score.to_sql('games_summary', con, if_exists='replace', index=False)
 
 
     
