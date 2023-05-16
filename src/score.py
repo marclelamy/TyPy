@@ -1,14 +1,14 @@
 import numpy as np
 import pandas as pd
 from src.query import query_table
-
+import sqlite3
 
 
 
 
 class Score(): 
-    def __init__(self, game_config, first_game, con):
-        self.game_config = game_config
+    def __init__(self, game_rules, first_game, con):
+        self.game_rules = game_rules
         self.first_game = first_game
         self.con = con
         self.make_condition()
@@ -29,11 +29,12 @@ class Score():
                  'difficulty': 'str', 
                  'train': 'int', 
                  'train_easy': 'int'}
+        print(self.game_rules)
         for rule, type in rules.items(): 
-            if isinstance(self.game_config[rule], str): 
-                self.general_condition += f' AND {rule} = "{self.game_config[rule]}" '
+            if isinstance(self.game_rules[rule], str): 
+                self.general_condition += f' AND {rule} = "{self.game_rules[rule]}" '
             else: 
-                self.general_condition += f' AND {rule} = {self.game_config[rule]} '
+                self.general_condition += f' AND {rule} = {self.game_rules[rule]} '
 
         # print(self.general_condition)
 
@@ -60,23 +61,36 @@ class Score():
         df_game_data.to_sql('games_settings', self.con, if_exists='append', index=False)
 
         # Explode dictionary
-        self.clean_games_settings(self.con, game_id)
+        df_game_data = pd.concat([df_game_data['game_id'], pd.json_normalize(df_game_data['game_settings'].apply(eval))], axis=1)
+        self.insert_or_replace_if_more_columns('clean_games_settings', df_game_data)
 
 
-    @staticmethod
-    def clean_games_settings(con, game_id: int):
-        '''Explodes the dictionary of the last game and insert it into the 
-        clean table
+
+
+    def insert_or_replace_if_more_columns(self, table_name, df):
+        '''Inserts a dataframe into a table. 
+        If there's a SQLite operational error that a column doesn't exist, 
+        the current table is concatenated with the new data and replaces 
+        the existing table in the database.
         '''
 
-        df_current_game_settings = query_table(con, 'games_settings', f'and game_id = {game_id}')
-        df_current_clean_games_settings = df_current_game_settings['game_settings'].apply(lambda x: pd.Series(eval(x)))
-        df_current_clean_games_settings.insert(0, 'game_id', df_current_game_settings.loc[0, 'game_id'])
-        df_current_clean_games_settings.to_sql('clean_games_settings', con, if_exists='insert', index=False)
+        # Try inserting, if error, concat current table with new data and replace
+        try: 
+            df.to_sql(table_name, self.con, if_exists='append', index=False)
+            print('inserted')
+        except sqlite3.OperationalError as e: 
+            if 'has no column named' in str(e):
+                df_full = query_table(self.con, table_name)
+                df_full = pd.concat([df_full, df], axis=0)
+                df_full.to_sql(table_name, self.con, if_exists='replace', index=False)
+                print('replaced')
+            else: # re-raise the error
+                df.to_sql('clean_games_settings', self.con, if_exists='append', index=False)
+
+
+
+
     
-
-
-    @staticmethod
     def summarize_games_scores(con): 
         query = f"""
             select
