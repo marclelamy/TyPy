@@ -1,15 +1,14 @@
 import numpy as np
 import pandas as pd
-from src.query import query_table
+from src.query import query_table, npast_games_words
 import sqlite3
 
 
 
 
 class Score(): 
-    def __init__(self, game_rules, first_game, con):
+    def __init__(self, game_rules, con):
         self.game_rules = game_rules
-        self.first_game = first_game
         self.con = con
         self.make_condition()
 
@@ -91,7 +90,7 @@ class Score():
 
 
     
-    def summarize_games_scores(con): 
+    def summarize_games_scores(self, condition=''): 
         query = f"""
             select
                 distinct
@@ -127,13 +126,15 @@ class Score():
             from keys_pressed kp 
             left join clean_games_settings cgs using(game_id)
             where 1=1
+                {condition}
 
             group by 1
             order by maxdatetime_unix asc
             """
 
-        df_high_score = pd.read_sql_query(query, con)
-        df_high_score.to_sql('games_summary', con, if_exists='replace', index=False)
+        # self.con.execute(query)
+        df_high_score = pd.read_sql_query(query, self.con)
+        df_high_score.to_sql('games_summary', self.con, if_exists='replace', index=False)
 
 
     
