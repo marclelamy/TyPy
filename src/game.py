@@ -1,5 +1,5 @@
 import src.detect_keys as dk
-from src.query import query_table
+from src.query import query_table, letters_ranking
 from src.sentence import Sentence
 from src.score import Score
 import time
@@ -17,9 +17,8 @@ import sys
 print('suuuuu')
 
 cwd = os.getcwd()
-try: os.remove(f'{cwd}/data/main_database.db')
-except: pass
-
+# try: os.remove(f'{cwd}/data/main_database.db')
+# except: pass
 
 
 def update_terminal(): 
@@ -29,45 +28,10 @@ def update_terminal():
 class Game(): 
     def __init__(self): 
         self.game_id = np.random.randint(10**10)
-        self.window_width, self.window_height = shutil.get_terminal_size()
         self.create_or_load_database()
-        self.available_configs = [file.replace('.toml', '') for file in os.listdir('configs/')]
         print('\n'*20)
         self.main_menu()
 
-
-
-    # @staticmethod
-    def read_config(self, config='game_default') -> dict: 
-        '''Given a config file name, reads it and return a dictionary
-        with the game settings.'''
-        with open(f'configs/{config}.toml', 'r') as f:
-            config = toml.load(f)
-
-        return self.clean_config(config)
-
-
-    def clean_config(self, config):
-        '''Clean the config to make sure that the game can be played
-        '''
-        # Adding rules if not in the config file
-        with open(f'configs/game_default.toml', 'r') as f:
-            default_config = toml.load(f)        
-        for key, value in default_config.items(): 
-            if key not in config.keys(): 
-                config[key] = value 
-
-        return config
-
-
-    def conf(self, config): 
-        game_config = config['game_config']
-        if game_config['train'] == True: 
-            if game_config['word_length_min'] < 5: 
-                game_config['word_length_min'] = 5
-
-        config['game_config'] = game_config
-        return config
 
 
     def create_or_load_database(self): 
@@ -82,7 +46,9 @@ class Game():
         #         self.first_game = False
         # else:
         #     self.first_game = True
-        self.con = sqlite3.connect(f'{cwd}/data/main_database.db')
+        if os.path.exists(f'{cwd}/data') == False:
+            os.mkdir(f'{cwd}/data')
+        self.con = sqlite3.connect(f'{cwd}/data/main_database.sqlite')
 
         keys_pressed = '''
         CREATE TABLE IF NOT EXISTS keys_pressed (
@@ -102,7 +68,7 @@ class Game():
         for query in [keys_pressed, games_settings]: 
             self.con.execute(query)
 
-        if pd.read_sql_query('select * from keys_pressed', self.con).empty: 
+        if pd.read_sql_query('select * from keys_pressed', self.con).shape[0] == 0: 
             self.first_game = True
         else: 
             self.first_game = False
@@ -128,7 +94,7 @@ class Game():
         menu += '\n'
         print(menu)
 
-        # Get user input and check 
+        # Get user input and check if the letter pressed is in the choices
         user_input = ''
         while user_input not in choices.keys(): 
             user_input = dk.next_key_pressed()[0].upper()
@@ -153,24 +119,57 @@ class Game():
             self.leaderboard()
 
 
+    # @staticmethod
+    def read_config(self, config='game_default') -> dict: 
+        '''Given a config file name, reads it and return a dictionary
+        with the game settings.'''
+        with open(f'configs/{config}.toml', 'r') as f:
+            game_config = toml.load(f)
+
+        if config == 'game_default': 
+            return game_config
+        else:
+            return self.clean_config(game_config)
+
+
+    def clean_config(self, config):
+        '''Clean the config to make sure that the game can be played
+        '''
+        with open(f'configs/game_default.toml', 'r') as f:
+            default_config = toml.load(f)        
+        for key, value in default_config.items(): 
+            if key not in config.keys(): 
+                config[key] = value 
+
+        # Check if the config is valid
+
+
+
+        return config
+
 
     def confirm_game_settings_before_game(self): 
         '''Sets the config for the game before launching it.
         '''
-
-        # Reads, sets and print default game confi
-        if 'user_default' in self.available_configs:
-            config = self.read_config('user_default')
+        # Reads, sets and print default game config
+        available_configs = [file.replace('.toml', '') for file in os.listdir('configs/')]
+        if 'user_default' in available_configs:
+            self.game_config = self.read_config('user_default')
         else:
-            config = self.read_config('game_default')
-        self.game_config = config['game_config']
-        self.game_preference = config['game_preference']
+            self.game_config = self.read_config('game_default')
 
-        print(self.game_config, self.game_preference)
+        # print(self.game_config, self.game_preference)
 
-        self.print_game_config()
+        # Print current game config 
+        print("\n\n\nCurrent game config: \n")
+        for config_type, config in self.game_config.items():
+            game_config_tabulate_basic = [[rule.capitalize().replace('_', ' '), value] for rule, value in config.items()]
+            print(tabulate(game_config_tabulate_basic, headers=[config_type.capitalize(), 'Value'], showindex=True), '\n')
 
-        # Choose action
+        # Get window size
+        self.window_width, self.window_height = shutil.get_terminal_size()
+
+        # Propose current game config
         choice = self.propose_menu(question = 'Do you wanna change Any?',
                                    choices = {'Y': 'Yes', 
                                               'N': 'No, play the game', 
@@ -219,11 +218,6 @@ class Game():
         print('Change rule')
 
 
-    def print_game_config(self, extensive=False): 
-        print("\n\n\nCurrent game settings: \n\n")
-        game_config_tabulate_basic = [[rule.capitalize().replace('_', ' '), value] for rule, value in self.game_config.items()]
-        print(tabulate(game_config_tabulate_basic, headers=['Rule', 'Value'], showindex=True))
-
 
     def change_game_config(self):
         '''
@@ -271,85 +265,6 @@ class Game():
         print(str, flush=True)
 
 
-    def generate_chart(self, wpm_list):
-        df = pd.DataFrame(wpm_list, columns=['wpm'])
-        # Calculate the maximum value in the 'wpm' column
-        max_wpm = df['wpm'].max()
-
-        # Create a list of empty strings to represent each row in the chart
-        rows = [' ' * len(df) for _ in range(20)]
-
-        # Loop over the rows in the DataFrame and add an 'x' to the appropriate position in the chart
-        for i, row in df.iterrows():
-            # Calculate the y position for this data point
-            y = int(row['wpm'] / max_wpm * 19)
-
-            # Add the 'x' to the appropriate position in the chart
-            rows[19 - y] = rows[19 - y][:i] + 'x' + rows[19 - y][i + 1:]
-
-        # Add the y-axis to the chart
-        for i in range(20):
-            rows[i] = '| ' + rows[i]
-
-        # Add the x-axis to the chart
-        rows.append('+ ' + '-' * len(df) + '\n')
-
-        # Convert the list of rows to a single string
-        chart = '\n'.join(rows)
-
-        print('\n' * 20)
-        print(chart, end='\r')
-
-
-    def generate_chart(self, data, height=20, width=80):
-        # Determine the maximum value in the data
-        max_val = max(data)
-
-        # Determine the number of data points to plot
-        num_points = min(len(data), width)
-
-        # Determine the x-axis tick interval
-        tick_interval = max(1, num_points // 10)
-
-        # Determine the maximum value for the y-axis
-        if len(data) >= height:
-            max_y = max_val
-        else:
-            max_y = data[0]
-
-        # Create a list of empty strings to represent each row in the chart
-        rows = [' ' * num_points for _ in range(height)]
-
-        # Loop over the data points and add an 'x' to the appropriate position in the chart
-        for i in range(num_points):
-            # Calculate the index of the data point to use for this position
-            index = int(i / num_points * len(data))
-
-            # Calculate the y position for this data point
-            y = int(data[index] / max_y * (height - 1))
-
-            # Add the 'x' to the appropriate position in the chart
-            rows[height - 2 - y] = rows[height - 2 - y][:i] + 'x' + rows[height - 2 - y][i + 1:]
-
-        # Add the y-axis ticks to the chart
-        for i in range(height - 1):
-            if i % (height // 10) == 0:
-                rows[i] = '|' + rows[i][1:]
-            else:
-                rows[i] = '|' + rows[i][1:]
-
-        # Add the x-axis ticks to the chart
-        for i in range(0, num_points, tick_interval):
-            rows[-1] = rows[-1][:i] + '-' + rows[-1][i + 1:]
-            rows[-2] = rows[-2][:i] + str(i) + rows[-2][i + 1 + len(str(i)):]
-
-        # Add the x-axis label to the chart
-        rows[-1] = rows[-1][:-1] + '+'
-
-        # Convert the list of rows to a single string
-        chart = '\n'.join(rows)
-        print(chart)
-        # return chart
 
         
     def hud(self, sentence_to_display, correct_key_count, keys_pressed): 
@@ -365,16 +280,16 @@ class Game():
             self.wpm_list.append(wpm)
             wpm_formatted = self.color_formatting(round(wpm, 1), self.best_wpm)
 
-            if self.game_preference['display_wpm'] == True:
+            if self.game_config['display']['display_wpm'] == True:
                 infos_to_print += f'WPM: {wpm_formatted}\n'
 
             # print('\n' * self.window_height)
-            if self.game_preference['display_chart'] == True:
+            if self.game_config['display']['display_chart'] == True:
                 self.generate_chart(self.wpm_list)
         else: 
             self.wpm_list = []
 
-        if self.game_preference['display_words_left'] == True:
+        if self.game_config['display']['display_words_left'] == True:
             words_left = sentence_to_display.count(' ')
             infos_to_print += f'{words_left + 1} words left to type\n'
 
@@ -391,18 +306,15 @@ class Game():
 
 
     def start_game(self): 
-        self.print_game_config()
         print('Play game', '\n' * self.window_height)
 
-        # Create sentence and score
         self.score = Score( 
-            self.game_config,
-            self.first_game,
+            self.game_config['rules'],
             self.con)
-        
+
         # Check if first game with those game particular settings
         try: 
-            game_count = query_table(self.con, 'clean_games_settings', self.score.general_condition).shape[0]
+            game_count = query_table(self.con, 'games_summary', self.score.general_condition).shape[0]
             if game_count == 0: 
                 self.first_game = True
         except pd.errors.DatabaseError: 
@@ -418,10 +330,10 @@ class Game():
         except: 
             self.best_wpm = 70
 
-        
-        # Generate sentence
+
+        # Create sentence and score
         sentence = Sentence(
-            self.game_config, 
+            self.game_config['rules'], 
             self.first_game,
             self.con,
             ).sentence
@@ -430,7 +342,6 @@ class Game():
         #####################################
         #### Here really starts the game ####
         #####################################
-
         # self.best_score = Score().best_scores(self.config) # best game for each of the rules or only for one? i think the best score for each of the rules. This function in Score() could calculate for each of the rules the best, avg (describe() type) and would return what would be in the dictionary/parameters of the function
         keys_pressed = []
         correct_key_count, incorrect_key_count = 0, 0
@@ -450,7 +361,6 @@ class Game():
                 keys_pressed.append([str(guess), correct_key, shift_pressed, time.time(), self.game_id]) 
 
                 # check opposite/right shift
-
 
                 if correct_key: 
                     sentence_to_display = sentence_to_display[1:]
@@ -475,24 +385,26 @@ class Game():
         ''' 
         print('\n'*20)
         # Log game
-        game_data = self.game_config
+        game_data = {**self.game_config['rules'], **self.game_config['display']}
         game_data.update(
             {'sentence': sentence,
              'keys_pressed': keys_pressed,
              'game_id': self.game_id}
         )
         self.score.log_game(game_data)
+         
+        # Propose to save on gbg, back to main menu, leaderboard
+        letters_ranking(self.con)
 
-        self.score.summarize_games_scores(self.con)
+        self.score.summarize_games_scores()
+        print(self.first_game)
         if self.first_game == False:
             self.compare_game()
         else:
             df_game_summary = self.score.load_game_stats(self.game_id)
             print('Game summary:')
             print(tabulate(df_game_summary.T))
-         
-        # Propose to save on gbg, back to main menu, leaderboard
-        
+
 
         # What to do after the game    
         print('\n' * 1)
