@@ -1,16 +1,15 @@
 import pandas as pd
 import numpy as np
-from src.query import Query
 import os
+from src.query import npast_games_words
 
 
 class Sentence(): 
-    def __init__(self, game_config, first_game, Query, con): 
+    def __init__(self, game_config, first_game, con): 
         # self.game_config = game_config
         self.cwd = os.getcwd()
         self.game_config = game_config
         self.first_game = first_game
-        self.query = Query
         self.con = con
 
         self.word_list = self.load_words(game_config['difficulty'])
@@ -52,7 +51,7 @@ class Sentence():
 
         if self.first_game == False or self.game_config['train'] == False: 
             try: 
-                banned_words = self.query.npast_games_words(self.game_config['n_games_banned_words'], len(all_words))
+                banned_words = npast_games_words(self.con, self.game_config['n_games_banned_words'], len(all_words))
             except:
                 banned_words = []
         else:
@@ -165,8 +164,6 @@ class Sentence():
 
     def only_one_letter(self, word_list): 
         query = '''
-
-
         with kp as (
         select 
             distinct
@@ -179,12 +176,11 @@ class Sentence():
 
         from keys_pressed 
         where 1=1
+            and correct_key = 1
+            and game_id > 100
             and time is not null
         order by time
         )
-
-
-
 
         , tbl1 as (
         select
@@ -196,9 +192,7 @@ class Sentence():
 
         from kp
         where 1=1
-            and correct_key = 1
-            and game_id > 100
-            and key_index < 200
+            and key_index <= 200
         )
 
         select 
@@ -211,16 +205,47 @@ class Sentence():
             and following_key is not null
         group by 1
         having 1=1
-            -- and count > 100
+            --and count < 200
         order by time_diff asc
+        '''
+        new_query = '''
+        with tbl as (
+        select 
+            key
+            , time
+            , lead(time) over(partition by game_id order by time desc) lead_time
+            , time - lead(time) over(partition by game_id order by time desc) time_diff
+            --, lead(key) over(order by time desc) lead_key
+            --, lead(time) over(order by time desc) lead_time
+            , row_number() over(partition by key order by time desc) rank
 
+        from keys_pressed
+        left join clean_games_settings using(game_id)
+        where 1=1 
+            and word_count > 20
+            and correct_key = 1
+
+        order by time 
+        )
+
+
+        select 
+            key
+            , avg(time_diff) time_diff
+
+        from tbl 
+        where rank <= 200
+
+        group by 1
+        order by 2 desc
 
         '''
+        letters = list('qwertyuiopasdfghjklzxcvbnm')
+        df = pd.read_sql_query(new_query, self.con).sort_values('time_diff', ascending=True).query('key.isin(@letters)')#.query('key != " "')#.query('following_key.str.lower().str.isalpha() and following_key.str.lower() == following_key and following_key.str.len() == 1')
+        print(df.head(50))
 
-        df = pd.read_sql_query(query, self.con).sort_values('time_diff', ascending=False).query('following_key.str.lower().str.isalpha() and following_key.str.lower() == following_key and following_key.str.len() == 1')
-        print(df.head())
         letter = df.iloc[0, 0]
-        voyelle = df.query('following_key.str.contains("a|e|i|o|u|y")').iloc[0, 0]
+        # voyelle = df.query('following_key.str.contains("a|e|i|o|u|y")').iloc[0, 0]
 
         letter_count = {}
         for word in word_list:

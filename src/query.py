@@ -1,11 +1,12 @@
 import pandas as pd
 import os
 import time
+from tabulate import tabulate
 
 
 cwd = os.getcwd()
 
-def query_table(con, table_name, condition): 
+def query_table(con, table_name, condition=''): 
     query = f'''
     select 
         * 
@@ -16,7 +17,7 @@ def query_table(con, table_name, condition):
     return pd.read_sql_query(query, con)
 
 
-def npast_games_words(con, n_past_games, corpus_size):
+def npast_games_words(con, n_past_games=1000000, n_past_words=1000000):
     '''Returns a list of words from the last n games played
     '''
 
@@ -34,10 +35,8 @@ def npast_games_words(con, n_past_games, corpus_size):
         '''
 
     df_query = pd.read_sql_query(query_npast_games_words, con)
-    done_words = ' '.join(df_query['sentence'].unique()).split(' ')
-
-    # if len(set(done_words)) < corpus_size:
-        
+    print(' '.join(df_query['sentence'].unique()))
+    done_words = ' '.join(df_query['sentence'].unique()).split(' ')[:n_past_words]
 
     return done_words
 
@@ -63,3 +62,39 @@ def load_query(con, query_name: str, text_only: bool = False) -> list:
 
 
 
+def letters_ranking(con, n_games: int = 10, n_letters: int = 10): 
+    new_query = '''
+    with tbl as (
+    select 
+        key
+        , time
+        , lead(time) over(partition by game_id order by time desc) lead_time
+        , time - lead(time) over(partition by game_id order by time desc) time_diff
+        --, lead(key) over(order by time desc) lead_key
+        --, lead(time) over(order by time desc) lead_time
+        , row_number() over(partition by key order by time desc) rank
+
+    from keys_pressed
+    left join clean_games_settings using(game_id)
+    where 1=1 
+        and word_count > 20
+        and correct_key = 1
+
+    order by time 
+    )
+
+
+    select 
+        key
+        , avg(time_diff) time_diff
+
+    from tbl 
+    where rank <= 200
+
+    group by 1
+    order by 2 desc
+
+    '''
+
+    df = pd.read_sql_query(new_query, con).sort_values('time_diff')
+    print(tabulate(df))
