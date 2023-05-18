@@ -11,8 +11,7 @@ class Sentence():
         self.game_config = game_config
         self.first_game = first_game
         self.con = con
-
-        self.word_list = self.load_words(game_config['difficulty'])
+        self.word_list = self.load_words(self.game_config['difficulty'])
         if self.game_config['train'] == False: 
             self.word_list = self.word_list[:self.game_config['word_count']]
         else: 
@@ -21,11 +20,12 @@ class Sentence():
 
 
         # print(f'word_list: {self.word_list}')
-        self.capitalize_word_list(game_config['capitalized_words'], game_config['capitalized_letters'])
+        self.capitalize_word_list(self.game_config['capitalized_words'], self.game_config['capitalized_letters'])
         # print(f'cap: {self.word_list}')
-        self.add_punctuation(game_config['punctuation'], game_config['punctuation_char'])
+        self.add_punctuation(self.game_config['punctuation'], self.game_config['punctuation_char'])
         # print(f'punc: {self.word_list}')
         self.sentence = ' '.join(self.word_list)
+        # self.sentence = '''--=qwertyuiop[]asdfghjkl;'zxcvbnm,./"'''
         # print(f'sentence: {self.sentence}')
 
 
@@ -99,17 +99,21 @@ class Sentence():
         ---------
         sentence str: list of word
         '''
+        print(f'punctuation: {punctuation_char}')
         punctuation_count = punctuation if punctuation > 1 else int(len(self.word_list) * punctuation)
 
-        common_punctuations = ['()', '{}', '[]', '!', "''", '*', ',', '.', ';', ':', '-', '_', ]
-        common_punctuations = ['()', '!', "''", '*', ',', '.', ';', ':', '-', '_', '<', '>', '/', '?', '=']
-        common_punctuations = [',', '.', '-', '!', "''", '()']
+        common_punctuations = list('''12345678900--=qwertyuiop[]\asdfghjkl;'zxcvbnm,./!@#$%^&*()_+QWERTYUIOP{}|ASDFGHJKL:"ZXCVBNM<>?"''')
+        # common_punctuations = ['()', '{}', '[]', '!', "''", '*', ',', '.', ';', ':', '-', '_', ]
+        # common_punctuations = ['()', '!', "''", '*', ',', '.', ';', ':', '-', '_', '<', '>', '/', '?', '=']
+        # common_punctuations = [',', '.', '-', '!', "''", '()']
         double_char = [punc for punc in common_punctuations if len(punc) > 1]
-        
 
         # Limiting characters to use 
-        np.random.shuffle(common_punctuations)
-        common_punctuations = common_punctuations[:punctuation_char]
+        if isinstance(punctuation_char, int) or isinstance(punctuation_char, float):
+            np.random.shuffle(common_punctuations)
+            common_punctuations = common_punctuations[:punctuation_char]
+        elif isinstance(punctuation_char, str):
+            common_punctuations = [punctuation_char]
 
         for index in range(punctuation_count):
             word = self.word_list[index]
@@ -222,7 +226,7 @@ class Sentence():
         from keys_pressed
         left join clean_games_settings using(game_id)
         where 1=1 
-            and word_count > 20
+            --and word_count > 20
             and correct_key = 1
 
         order by time 
@@ -241,22 +245,34 @@ class Sentence():
 
         '''
         letters = list('qwertyuiopasdfghjklzxcvbnm')
-        df = pd.read_sql_query(new_query, self.con).sort_values('time_diff', ascending=True).query('key.isin(@letters)')#.query('key != " "')#.query('following_key.str.lower().str.isalpha() and following_key.str.lower() == following_key and following_key.str.len() == 1')
+        allowed_characters = list('''qwertyuiop[]asdfghjkl;'zxcvbnm,./-=''')
+        df = pd.read_sql_query(new_query, self.con).sort_values('time_diff', ascending=self.game_config['train_easy']).query('key in @allowed_characters')
+
+        # If training and punctuation are set, keep only punctuation else keep only letters
         print(df.head(50))
-
+        # import time
+        # time.sleep(10)
+        if self.game_config['punctuation'] > 0: 
+            df = df.query('key not in @letters')
+        else:
+            df = df.query('key in @letters')
         letter = df.iloc[0, 0]
-        # voyelle = df.query('following_key.str.contains("a|e|i|o|u|y")').iloc[0, 0]
+        self.game_config['character_in_focus'] = letter
+        if letter.isalpha() == False: 
+            self.game_config['punctuation_char'] = letter
+            word_list = word_list[:self.game_config['word_count']]
 
-        letter_count = {}
-        for word in word_list:
-            letter_count[word] = word.count(letter) #int(np.ceil(word.count(letter) + word.count(voyelle)/3)) #/3 is a weight so it does't count as much as a letter. In testing
+        else: 
+            letter_count = {}
+            for word in word_list:
+                letter_count[word] = word.count(letter) #int(np.ceil(word.count(letter) + word.count(voyelle)/3)) #/3 is a weight so it does't count as much as a letter. In testing
 
-        freq = dict(sorted(letter_count.items(), key=lambda item: item[1], reverse=True))
-        freq = {k: v for k, v in freq.items() if v > 0}
-        word_list = [word for word, count in freq.items() for x in range(count)]
-        
-        total_weights = sum(freq.values())
-        probas = [weight/total_weights for weight in freq.values()]
-        word_list = np.random.choice(list(freq.keys()), self.game_config['word_count'], False, probas)
+            freq = dict(sorted(letter_count.items(), key=lambda item: item[1], reverse=True))
+            freq = {k: v for k, v in freq.items() if v > 0}
+            word_list = [word for word, count in freq.items() for x in range(count)]
+            
+            total_weights = sum(freq.values())
+            probas = [weight/total_weights for weight in freq.values()]
+            word_list = np.random.choice(list(freq.keys()), self.game_config['word_count'], False, probas)
 
         return list(word_list)

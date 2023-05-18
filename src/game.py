@@ -13,6 +13,7 @@ import pandas as pd
 from termcolor import colored
 import re
 import sys
+import termchart
 
 print('suuuuu')
 
@@ -140,10 +141,7 @@ class Game():
         for key, value in default_config.items(): 
             if key not in config.keys(): 
                 config[key] = value 
-
         # Check if the config is valid
-
-
 
         return config
 
@@ -152,7 +150,7 @@ class Game():
         '''Sets the config for the game before launching it.
         '''
         # Reads, sets and print default game config
-        available_configs = [file.replace('.toml', '') for file in os.listdir('configs/')]
+        available_configs = [file.replace('.toml', '') for file in os.listdir(f'{cwd}/configs/')]
         if 'user_default' in available_configs:
             self.game_config = self.read_config('user_default')
         else:
@@ -274,6 +272,7 @@ class Game():
 
         infos_to_print = ''
         # infos_to_print = '\n' * self.window_height
+        wpm = 0
         if len(keys_pressed) > 1:
             # print(keys_pressed[-1][3],  keys_pressed[0][3])
             wpm = self.wpm(correct_key_count, keys_pressed[-1][3] - keys_pressed[0][3])
@@ -285,7 +284,10 @@ class Game():
 
             # print('\n' * self.window_height)
             if self.game_config['display']['display_chart'] == True:
-                self.generate_chart(self.wpm_list)
+                self.ascii_chart.addData(wpm)
+            # graph.addData(rand)
+                self.ascii_chart.draw()
+
         else: 
             self.wpm_list = []
 
@@ -298,7 +300,11 @@ class Game():
         infos_to_print += ' ' * (self.window_width - len(infos_to_print)-10) 
         # print(infos_to_print, '\t'*5, end='\r')
         # print(repr(infos_to_print), '\n'*5)
+
+
         update_terminal()
+        # step = len([dt for dt in keys_pressed]) // 30
+        # data = [keys_pressed[i] for i in range(0, len(keys_pressed), step)]
         print(infos_to_print)
         # self.print_multine_with_carriage(infos_to_print) # This adds a new line at the end
         # sys.stdout.write(infos_to_print)
@@ -332,11 +338,11 @@ class Game():
 
 
         # Create sentence and score
-        sentence = Sentence(
+        self.sentence = Sentence(
             self.game_config['rules'], 
             self.first_game,
             self.con,
-            ).sentence
+            )
 
 
         #####################################
@@ -345,8 +351,11 @@ class Game():
         # self.best_score = Score().best_scores(self.config) # best game for each of the rules or only for one? i think the best score for each of the rules. This function in Score() could calculate for each of the rules the best, avg (describe() type) and would return what would be in the dictionary/parameters of the function
         keys_pressed = []
         correct_key_count, incorrect_key_count = 0, 0
-        sentence_to_display = sentence
-        for letter_to_type in sentence:
+        sentence_to_display = self.sentence.sentence
+        self.ascii_chart = termchart.Graph([])
+        # self.ascii_chart.setCols(30)
+        # self.ascii_chart.setRows(20)
+        for letter_to_type in self.sentence.sentence:
             # Refresh HUD
             self.hud(
                 sentence_to_display,
@@ -371,8 +380,11 @@ class Game():
 
         
         # End game
+        if 'character_in_focus' in self.sentence.game_config.keys():
+            self.game_config['rules']['character_in_focus'] = self.sentence.game_config['character_in_focus']
+        # self.game_config['rules'] = self.sentence.game_config['rules'] # If the the punctuation char is replaced in the case of training mode
         self.end_game(
-            sentence, 
+            self.sentence.sentence, 
             keys_pressed
         )
 
@@ -596,3 +608,41 @@ class Game():
 
 
 
+    # rmv this 
+    def printranking(self): 
+        new_query = '''
+        with tbl as (
+        select 
+            key
+            , time
+            , lead(time) over(partition by game_id order by time desc) lead_time
+            , time - lead(time) over(partition by game_id order by time desc) time_diff
+            --, lead(key) over(order by time desc) lead_key
+            --, lead(time) over(order by time desc) lead_time
+            , row_number() over(partition by key order by time desc) rank
+
+        from keys_pressed
+        left join clean_games_settings using(game_id)
+        where 1=1 
+            --and word_count > 20
+            and correct_key = 1
+
+        order by time 
+        )
+
+
+        select 
+            key
+            , avg(time_diff) time_diff
+
+        from tbl 
+        where rank <= 200
+
+        group by 1
+        order by 2 desc
+
+        '''
+        letters = list('qwertyuiopasdfghjklzxcvbnm')
+        allowed_characters = list('''qwertyuiop[]asdfghjkl;'zxcvbnm,./-=''')
+        df = pd.read_sql_query(new_query, self.con).sort_values('time_diff', ascending=self.game_config['train_easy']).query('key in @allowed_characters')
+        print(df)
