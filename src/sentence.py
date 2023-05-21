@@ -43,16 +43,16 @@ class Sentence():
 
         # Getting worst characters 
         
-        
-        
+
         # Remove words that are too long or too short or in the ngames_past_words
-        for word in self.word_list: 
-            if word in ngames_past_words or len(word) > self.game_config['word_length_max'] or len(word) < self.game_config['word_length_min']:
-                self.word_list.remove(word)
+        self.word_list = [word for word in self.word_list if word not in ngames_past_words \
+                                                            and len(word) <= self.game_config['word_length_max'] \
+                                                            and len(word) >= self.game_config['word_length_min']]
 
 
         # Training mode
         if self.game_config['train'] == True: 
+            print('Training mode')
             df_character_ranking = character_ranking(self.con)
             if self.game_config['train_letter_type'] == 'lower_case_letters':
                 df = pd.DataFrame(self.word_list, columns=['word'])
@@ -67,12 +67,8 @@ class Sentence():
                 df = df.sort_values(by=['letter_count', 'total_potential_time_per_letter'], ascending=False).reset_index(drop=True)
                 self.word_list = df['word'].tolist()
 
-            print(df_character_ranking.query(f'type == "{self.game_config["train_letter_type"]}"').head(5))
-            time.sleep(20)
-
         # Capitalizing and adding punctuation
         # This comes at the end because it need the full list of words after filtering 
-        np.random.shuffle(self.word_list)
         self.sentence = ' '.join(self.word_list[:self.game_config['word_count']])
         return self.sentence
         
@@ -87,18 +83,20 @@ class Sentence():
         to type compared to the common word 
         google_most_used_words is the top 10k on Google
         '''
-
-        if difficulty.lower() == 'hard':
-            file_path = f'{self.cwd}/data/text/hard_words.txt'
-        elif difficulty.lower() == 'easy':
-            file_path = f'{self.cwd}/data/text/common_words.txt'
-        elif difficulty.lower() == 'medium':
-            file_path = f'{self.cwd}/data/text/google_most_used_words.txt'
-            
-        with open(file_path) as file: 
-            all_words = file.read().split('\n')
+        file_paths = []
+        if 'hard' in difficulty.lower():
+            file_paths += [f'{self.cwd}/data/text/hard_words.txt']
+        if 'easy' in difficulty.lower():
+            file_paths += [f'{self.cwd}/data/text/common_words.txt']
+        if 'medium' in difficulty.lower():
+            file_paths += [f'{self.cwd}/data/text/google_most_used_words.txt']
         
-        return all_words
+        word_list = []
+        for file_path in file_paths:
+            with open(file_path, 'r') as file: 
+                word_list += file.read().split('\n')
+        np.random.shuffle(word_list)
+        return word_list
 
 
 
@@ -207,7 +205,6 @@ class Sentence():
         df = pd.read_sql_query(query, self.con).sort_values ('time_diff', ascending=self.game_config['train_easy']).query('key in @allowed_characters')
 
         # If training and punctuation are set, keep only punctuation else keep only letters
-        print(df.head(50))
         # import time
         # time.sleep(10)
         if self.game_config['punctuation'] > 0: 
