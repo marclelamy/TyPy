@@ -1,7 +1,8 @@
 import pandas as pd
 import numpy as np
 import os
-from src.query import npast_games_words
+import time 
+from src.query import npast_games_words, character_ranking
 
 
 class Sentence(): 
@@ -11,22 +12,71 @@ class Sentence():
         self.game_config = game_config
         self.first_game = first_game
         self.con = con
+        # self.word_list = self.load_words(self.game_config['difficulty'])
+        # if self.game_config['train'] == False: 
+        #     self.word_list = self.word_list[:self.game_config['word_count']]
+        # else: 
+        #     # self.word_list = self.get_n_slowest_words(self.word_list)
+        #     self.word_list = self.only_one_letter(self.word_list)
+
+
+        # # print(f'word_list: {self.word_list}')
+        # self.capitalize_word_list(self.game_config['capitalized_words'], self.game_config['capitalized_letters'])
+        # # print(f'cap: {self.word_list}')
+        # self.add_punctuation(self.game_config['punctuation'], self.game_config['punctuation_char'])
+        # # print(f'punc: {self.word_list}')
+        # self.sentence = ' '.join(self.word_list)
+        # # self.sentence = '''--=qwertyuiop[]asdfghjkl;'zxcvbnm,./"'''
+        # # print(f'sentence: {self.sentence}')
+
+
+
+    def generate_sentence(self): 
+        '''Creates a sentence based on the game_config
+        '''
+
         self.word_list = self.load_words(self.game_config['difficulty'])
-        if self.game_config['train'] == False: 
-            self.word_list = self.word_list[:self.game_config['word_count']]
-        else: 
-            # self.word_list = self.get_n_slowest_words(self.word_list)
-            self.word_list = self.only_one_letter(self.word_list)
+        
+        # Remove banned words
+        ngames_past_words = npast_games_words(self.con, self.game_config['n_games_banned_words'])
 
 
-        # print(f'word_list: {self.word_list}')
-        self.capitalize_word_list(self.game_config['capitalized_words'], self.game_config['capitalized_letters'])
-        # print(f'cap: {self.word_list}')
-        self.add_punctuation(self.game_config['punctuation'], self.game_config['punctuation_char'])
-        # print(f'punc: {self.word_list}')
-        self.sentence = ' '.join(self.word_list)
-        # self.sentence = '''--=qwertyuiop[]asdfghjkl;'zxcvbnm,./"'''
-        # print(f'sentence: {self.sentence}')
+        # Getting worst characters 
+        
+        
+        
+        # Remove words that are too long or too short or in the ngames_past_words
+        for word in self.word_list: 
+            if word in ngames_past_words or len(word) > self.game_config['word_length_max'] or len(word) < self.game_config['word_length_min']:
+                self.word_list.remove(word)
+
+
+        # Training mode
+        if self.game_config['train'] == True: 
+            df_character_ranking = character_ranking(self.con)
+            if self.game_config['train_letter_type'] == 'lower_case_letters':
+                df = pd.DataFrame(self.word_list, columns=['word'])
+                letter_in_focus = df_character_ranking.query(f'type == "{self.game_config["train_letter_type"]}"').iloc[0, 0]
+                self.game_config['character_in_focus'] = letter_in_focus
+
+                df_character_ranking = character_ranking(self.con)
+                time_per_char = dict(df_character_ranking[['key', 'avg_time_diff']].values)
+                df['letter_count'] = df['word'].str.count(letter_in_focus)
+                df['total_potential_time'] = df['word'].apply(lambda x: sum([time_per_char[letter] for letter in list(x) if letter != letter_in_focus]))
+                df['total_potential_time_per_letter'] = df['total_potential_time'] / df['word'].str.len()
+                df = df.sort_values(by=['letter_count', 'total_potential_time_per_letter'], ascending=False).reset_index(drop=True)
+                self.word_list = df['word'].tolist()
+
+            print(df_character_ranking.query(f'type == "{self.game_config["train_letter_type"]}"').head(5))
+            time.sleep(20)
+
+        # Capitalizing and adding punctuation
+        # This comes at the end because it need the full list of words after filtering 
+        np.random.shuffle(self.word_list)
+        self.sentence = ' '.join(self.word_list[:self.game_config['word_count']])
+        return self.sentence
+        
+
 
 
 
@@ -47,30 +97,10 @@ class Sentence():
             
         with open(file_path) as file: 
             all_words = file.read().split('\n')
-
-
-        if self.first_game == False or self.game_config['train'] == False: 
-            try: 
-                banned_words = npast_games_words(self.con, self.game_config['n_games_banned_words'], len(all_words))
-            except:
-                banned_words = []
-        else:
-            banned_words = []
-
-
-        # print(f'banned words {banned_words}')
         
-
-        # Removing non letters characters and words g/l than max/min length
-        word_list = self.filter_word_length(all_words, self.game_config['word_length_min'], self.game_config['word_length_max'])
-        word_list = [''.join([char for char in word if char.isalpha()]).lower() for word in word_list if ''.join([char for char in word if char.isalpha()]).lower() not in banned_words]
-        np.random.shuffle(word_list)
-        return word_list
+        return all_words
 
 
-    def filter_word_length(self, all_words, word_length_min, word_length_max): 
-        # print(word_length_min)
-        return [word for word in all_words if word_length_min <= len(word) <= word_length_max]
 
 
     def capitalize_word_list(self, capitalized_words, capitalized_letters): 
@@ -128,92 +158,16 @@ class Sentence():
         np.random.shuffle(self.word_list)
 
 
-    def get_n_slowest_words(self, word_list):
-        '''Among the list of word, find the words that would 
-        potentially take the longest to type based on the 
-        average duration it takes to the player to type all 
-        each and individual letters of the words.
-
-        parameters
-        ----------
-        word_count int: numbers of worst words to return
-        '''
-
-        # Load key score 
-        df_keytime = self.query.load_query('time_per_key_pressed')
-        key_score = dict(zip(df_keytime['following_key'], df_keytime['time_diff'].round(4)))
-
-        # Get score for each word
-        # print(f'{min([len(word) for word in word_list]) = } - {len(word_list) = }')
-        df_words = pd.DataFrame(word_list, columns=['word'])
-
-        # This is supposed to add a weight so that not only least frequent letters are proposed but it's not working
-        # all_words_letters = ''.join(df_words['word'])
-        # all_words_letters_count = {letter: all_words_letters.count(letter) for letter in set(all_words_letters)}
-        # all_words_letters_count = {key: -(value - min(all_words_letters_count.values()))/(max(all_words_letters_count.values()) - min(all_words_letters_count.values())) for key, value in all_words_letters_count.items()}
-        # key_score = {key: key_score[key] * all_words_letters_count[key] for key in all_words_letters_count.keys()}
-
-        df_words['word_score'] = df_words['word'].apply(lambda word: sum([key_score[char] for char in word.lower().replace('-', '') if char in key_score.keys()]))
-        df_words['avg_letter_score'] = df_words['word_score'] / df_words['word'].str.len()
-
-
-        # Sort dataframe and pick the top 25 words with at least four letters
-        df_words.sort_values('avg_letter_score', ascending=self.game_config['train_easy']).to_csv('word_score.csv', index=False)
-        # print(df_words.head(100))
-        top_n = df_words.sort_values('avg_letter_score', ascending=self.game_config['train_easy'])
-        top_n = top_n.iloc[:self.game_config['word_count'], 0]
-        return list(top_n)
     
 
 
     def only_one_letter(self, word_list): 
-        query = '''
-        with kp as (
-        select 
-            distinct
-            key
-            , time
-            , correct_key
-            , game_id
-            , row_number() over(partition by key order by time desc) as key_index
-            
+        max_key_count_to_use = 200
+        min_key_count_to_use = 1
 
-        from keys_pressed 
-        where 1=1
-            and correct_key = 1
-            and game_id > 100
-            and time is not null
-        order by time
-        )
 
-        , tbl1 as (
-        select
-            key
-            , lead(key) over(partition by game_id order by game_id, time) following_key
-            , time
-            , lead(time) over(partition by game_id order by game_id, time) following_time
-            , game_id
-
-        from kp
-        where 1=1
-            and key_index <= 200
-        )
-
-        select 
-            following_key
-            , avg(following_time - time) as time_diff
-            , count(*) count
-
-        from tbl1
-        where 1=1
-            and following_key is not null
-        group by 1
-        having 1=1
-            --and count < 200
-        order by time_diff asc
-        '''
-        new_query = '''
-        with tbl as (
+        query = f''' 
+        with time_per_key as (
         select 
             key
             , time
@@ -221,7 +175,7 @@ class Sentence():
             , time - lead(time) over(partition by game_id order by time desc) time_diff
             --, lead(key) over(order by time desc) lead_key
             --, lead(time) over(order by time desc) lead_time
-            , row_number() over(partition by key order by time desc) rank
+            , row_number() over(partition by key order by time desc) letter_descending_rank 
 
         from keys_pressed
         left join clean_games_settings using(game_id)
@@ -234,19 +188,23 @@ class Sentence():
 
 
         select 
-            key
-            , avg(time_diff) time_diff
+            key 
+            , avg(time_diff) avg_time_diff
+            , count(*) count
+            , max(letter_descending_rank) 
 
-        from tbl 
-        where rank <= 200
+        from time_per_key
+        where 1=1
+            and letter_descending_rank <= {max_key_count_to_use}
+            and letter_descending_rank >= {min_key_count_to_use}
 
-        group by 1
-        order by 2 desc
-
+        group by key 
+        order by avg_time_diff desc
         '''
+
         letters = list('qwertyuiopasdfghjklzxcvbnm')
         allowed_characters = list('''qwertyuiop[]asdfghjkl;'zxcvbnm,./-=''')
-        df = pd.read_sql_query(new_query, self.con).sort_values('time_diff', ascending=self.game_config['train_easy']).query('key in @allowed_characters')
+        df = pd.read_sql_query(query, self.con).sort_values ('time_diff', ascending=self.game_config['train_easy']).query('key in @allowed_characters')
 
         # If training and punctuation are set, keep only punctuation else keep only letters
         print(df.head(50))

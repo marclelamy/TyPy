@@ -1,5 +1,5 @@
 import src.detect_keys as dk
-from src.query import query_table, letters_ranking
+from src.query import query_table, character_ranking
 from src.sentence import Sentence
 from src.score import Score
 import time
@@ -65,9 +65,31 @@ class Game():
         game_id INTEGER,
         game_settings TEXT
         )'''
+        clean_games_settings = '''
+        CREATE TABLE IF NOT EXISTS clean_games_settings (
+        game_id INTEGER,
+        sentence TEXT
+        )'''
+        characters = '''
+        CREATE TABLE IF NOT EXISTS characters (
+        character TEXT,
+        type TEXT
+        );
+        '''
 
-        for query in [keys_pressed, games_settings]: 
+        for query in [keys_pressed, games_settings, characters, clean_games_settings]: 
             self.con.execute(query)
+
+        if pd.read_sql_query('select * from characters', self.con).shape[0] == 0:
+            characters_dict = {
+                'lower_case_letters': ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'z', 'x', 'c', 'v', 'b', 'n', 'm'],
+                'upper_case_letters': ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'Z', 'X', 'C', 'V', 'B', 'N', 'M'],
+                'punctuation': ['`', '-', '=', '[', ']', '\\', ';', "'", ',', '.', '/', '~', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '{', '}', '|', ':', '"', '<', '>', '?'],
+                'number': ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
+            }
+            characters_list = [[char, key] for key, value in characters_dict.items() for char in value]
+            pd.DataFrame(characters_list, columns=['character', 'type']).to_sql('characters', self.con, if_exists='replace', index=False)
+
 
         if pd.read_sql_query('select * from keys_pressed', self.con).shape[0] == 0: 
             self.first_game = True
@@ -323,7 +345,7 @@ class Game():
             game_count = query_table(self.con, 'games_summary', self.score.general_condition).shape[0]
             if game_count == 0: 
                 self.first_game = True
-        except pd.errors.DatabaseError: 
+        except pd.errors.DatabaseError as e:
             self.first_game = True
 
 
@@ -343,6 +365,10 @@ class Game():
             self.first_game,
             self.con,
             )
+        if game_count == 0:
+            self.sentence.sentence = 'the quick brown fox jumps over the lazy dog'
+        else: 
+            self.sentence.generate_sentence()
 
 
         #####################################
@@ -406,7 +432,7 @@ class Game():
         self.score.log_game(game_data)
          
         # Propose to save on gbg, back to main menu, leaderboard
-        letters_ranking(self.con)
+        # print(tabulate(character_ranking(self.con).query(f'type == "{self.game_config["rules"]["character_in_focus"]}"')))
 
         self.score.summarize_games_scores()
         print(self.first_game)
