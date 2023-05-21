@@ -50,7 +50,7 @@ class Game():
         if os.path.exists(f'{cwd}/data') == False:
             os.mkdir(f'{cwd}/data')
         self.con = sqlite3.connect(f'{cwd}/data/main_database.sqlite')
-
+        self.con.execute('drop table characters')
         keys_pressed = '''
         CREATE TABLE IF NOT EXISTS keys_pressed (
         key TEXT,
@@ -82,8 +82,8 @@ class Game():
 
         if pd.read_sql_query('select * from characters', self.con).shape[0] == 0:
             characters_dict = {
-                'lower_case_letters': ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'z', 'x', 'c', 'v', 'b', 'n', 'm'],
-                'upper_case_letters': ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'Z', 'X', 'C', 'V', 'B', 'N', 'M'],
+                'lower_case_letter': ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'z', 'x', 'c', 'v', 'b', 'n', 'm'],
+                'upper_case_letter': ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'Z', 'X', 'C', 'V', 'B', 'N', 'M'],
                 'punctuation': ['`', '-', '=', '[', ']', '\\', ';', "'", ',', '.', '/', '~', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '{', '}', '|', ':', '"', '<', '>', '?'],
                 'number': ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
             }
@@ -171,6 +171,7 @@ class Game():
     def confirm_game_settings_before_game(self): 
         '''Sets the config for the game before launching it.
         '''
+        print(tabulate(character_ranking(self.con, condition='and c.type = "lower_case_letter"').head(10)))
         # Reads, sets and print default game config
         available_configs = [file.replace('.toml', '') for file in os.listdir(f'{cwd}/configs/')]
         if 'user_default' in available_configs:
@@ -243,7 +244,6 @@ class Game():
         '''
         '''
         print(self.available_configs)
-        time.sleep(1)
         self.game_config = self.read_config('performance')['game_config']
 
 
@@ -346,6 +346,7 @@ class Game():
             if game_count == 0: 
                 self.first_game = True
         except pd.errors.DatabaseError as e:
+            game_count = 0
             self.first_game = True
 
 
@@ -432,7 +433,7 @@ class Game():
         self.score.log_game(game_data)
          
         # Propose to save on gbg, back to main menu, leaderboard
-        # print(tabulate(character_ranking(self.con).query(f'type == "{self.game_config["rules"]["character_in_focus"]}"')))
+        print(tabulate(character_ranking(self.con, condition='and c.type = "lower_case_letter"').head(10)))
 
         self.score.summarize_games_scores()
         print(self.first_game)
@@ -619,7 +620,7 @@ class Game():
                     continue 
             
                 comparison_value = df_described.loc[comparison, metric]
-                if metric in ('wpm', 'accuracy'):
+                if metric in ('wpm', 'accuracy', 'game_duration', 'keys_to_press', 'errors'):
                     value = self.color_formatting(comparison_value, current_value, higher_better_map[metric])
                 else: 
                     value = comparison_value

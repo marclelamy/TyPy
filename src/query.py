@@ -13,13 +13,14 @@ def query_table(con, table_name, condition=''):
     from {table_name} 
     where 1 = 1 
         {condition}'''
-    
     return pd.read_sql_query(query, con)
 
 
-def npast_games_words(con, n_past_games=1000000, n_past_words=1000000):
+def npast_games_words(con, n_past_games=None):
     '''Returns a list of words from the last n games played
     '''
+    if n_past_games == None:
+        n_past_games = 1000000
 
     query_npast_games_words = f'''
         select
@@ -35,10 +36,8 @@ def npast_games_words(con, n_past_games=1000000, n_past_words=1000000):
         '''
 
     df_query = pd.read_sql_query(query_npast_games_words, con)
-    print(' '.join(df_query['sentence'].unique()))
-    done_words = ' '.join(df_query['sentence'].unique()).split(' ')[:n_past_words]
-
-    return done_words
+    ngames_past_words = ' '.join(df_query['sentence'].unique()).split(' ')
+    return ngames_past_words
 
 
 
@@ -62,9 +61,17 @@ def load_query(con, query_name: str, text_only: bool = False) -> list:
 
 
 
-def letters_ranking(con, n_games: int = 10, n_letters: int = 10): 
-    new_query = '''
-    with tbl as (
+def character_ranking(con, max_key_count_to_use=None, min_key_count_to_use=None, condition=''): 
+    '''Returns a dataframe with the ranking of the characters
+    based on the time it takes to type them.
+    '''
+    if max_key_count_to_use == None:
+        max_key_count_to_use = 1_000_000
+    if min_key_count_to_use == None:
+        min_key_count_to_use = 0
+
+    query = f''' 
+    with time_per_key as (
     select 
         key
         , time
@@ -72,12 +79,12 @@ def letters_ranking(con, n_games: int = 10, n_letters: int = 10):
         , time - lead(time) over(partition by game_id order by time desc) time_diff
         --, lead(key) over(order by time desc) lead_key
         --, lead(time) over(order by time desc) lead_time
-        , row_number() over(partition by key order by time desc) rank
+        , row_number() over(partition by key order by time desc) letter_descending_rank 
 
     from keys_pressed
     left join clean_games_settings using(game_id)
     where 1=1 
-        and word_count > 20
+        --and word_count > 20
         and correct_key = 1
 
     order by time 
@@ -85,16 +92,20 @@ def letters_ranking(con, n_games: int = 10, n_letters: int = 10):
 
 
     select 
-        key
-        , avg(time_diff) time_diff
+        key 
+        , avg(time_diff) avg_time_diff
+        , count(*) count
+        , c.type
 
-    from tbl 
-    where rank <= 200
-
-    group by 1
-    order by 2 desc
-
+    from time_per_key tpk
+    left join characters c on tpk.key = c.character
+    where 1=1
+        and letter_descending_rank <= {max_key_count_to_use}
+        and letter_descending_rank >= {min_key_count_to_use}
+        {condition}
+            
+    group by key 
+    order by avg_time_diff desc
     '''
 
-    df = pd.read_sql_query(new_query, con).sort_values('time_diff')
-    print(tabulate(df))
+    return pd.read_sql_query(query, con)

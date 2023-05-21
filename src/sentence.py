@@ -39,9 +39,11 @@ class Sentence():
         
         # Remove banned words
         ngames_past_words = npast_games_words(self.con, self.game_config['n_games_banned_words'])
+        print(f'ngames_past_words: {ngames_past_words}')
+        time.sleep(2)
 
 
-        # Getting worst characters 
+        # Getting worst characters lower_case_letter
         
 
         # Remove words that are too long or too short or in the ngames_past_words
@@ -54,9 +56,11 @@ class Sentence():
         if self.game_config['train'] == True: 
             print('Training mode')
             df_character_ranking = character_ranking(self.con)
-            if self.game_config['train_letter_type'] == 'lower_case_letters':
+            if self.game_config['train_letter_type'] == 'lower_case_letter':
                 df = pd.DataFrame(self.word_list, columns=['word'])
                 letter_in_focus = df_character_ranking.query(f'type == "{self.game_config["train_letter_type"]}"').iloc[0, 0]
+                print(f'letter_in_focus: {letter_in_focus}')
+                time.sleep(1)
                 self.game_config['character_in_focus'] = letter_in_focus
 
                 df_character_ranking = character_ranking(self.con)
@@ -69,7 +73,10 @@ class Sentence():
 
         # Capitalizing and adding punctuation
         # This comes at the end because it need the full list of words after filtering 
-        self.sentence = ' '.join(self.word_list[:self.game_config['word_count']])
+        self.word_list = self.word_list[:self.game_config['word_count']]
+        self.word_list = self.capitalize_word_list(self.game_config['capitalized_words'], self.game_config['capitalized_letters'])
+        self.word_list = self.add_punctuation(self.game_config['punctuation'], self.game_config['punctuation_char'])
+        self.sentence = ' '.join(self.word_list)
         return self.sentence
         
 
@@ -95,6 +102,7 @@ class Sentence():
         for file_path in file_paths:
             with open(file_path, 'r') as file: 
                 word_list += file.read().split('\n')
+        word_list = list(set(word_list))
         np.random.shuffle(word_list)
         return word_list
 
@@ -105,7 +113,7 @@ class Sentence():
         words_to_cap = capitalized_words if capitalized_words > 1 else int(len(self.word_list) * capitalized_words)
 
         for index, word in enumerate(self.word_list[:words_to_cap]): 
-            if capitalized_letters == "First":
+            if capitalized_letters.lower() == "first":
                 self.word_list[index] = word.title()
             else:
                 # Generate a list of n numbers, suffle it and keep the indexes >= to the number of letters to cap
@@ -117,6 +125,7 @@ class Sentence():
                 self.word_list[index] = ''.join([char.upper() if index_char in random_list else char for index_char, char in enumerate(word)])
         
         np.random.shuffle(self.word_list)
+        return self.word_list
 
 
     def add_punctuation(self, punctuation, punctuation_char):
@@ -154,80 +163,8 @@ class Sentence():
             self.word_list[index] = word
 
         np.random.shuffle(self.word_list)
-
+        return self.word_list
 
     
 
 
-    def only_one_letter(self, word_list): 
-        max_key_count_to_use = 200
-        min_key_count_to_use = 1
-
-
-        query = f''' 
-        with time_per_key as (
-        select 
-            key
-            , time
-            , lead(time) over(partition by game_id order by time desc) lead_time
-            , time - lead(time) over(partition by game_id order by time desc) time_diff
-            --, lead(key) over(order by time desc) lead_key
-            --, lead(time) over(order by time desc) lead_time
-            , row_number() over(partition by key order by time desc) letter_descending_rank 
-
-        from keys_pressed
-        left join clean_games_settings using(game_id)
-        where 1=1 
-            --and word_count > 20
-            and correct_key = 1
-
-        order by time 
-        )
-
-
-        select 
-            key 
-            , avg(time_diff) avg_time_diff
-            , count(*) count
-            , max(letter_descending_rank) 
-
-        from time_per_key
-        where 1=1
-            and letter_descending_rank <= {max_key_count_to_use}
-            and letter_descending_rank >= {min_key_count_to_use}
-
-        group by key 
-        order by avg_time_diff desc
-        '''
-
-        letters = list('qwertyuiopasdfghjklzxcvbnm')
-        allowed_characters = list('''qwertyuiop[]asdfghjkl;'zxcvbnm,./-=''')
-        df = pd.read_sql_query(query, self.con).sort_values ('time_diff', ascending=self.game_config['train_easy']).query('key in @allowed_characters')
-
-        # If training and punctuation are set, keep only punctuation else keep only letters
-        # import time
-        # time.sleep(10)
-        if self.game_config['punctuation'] > 0: 
-            df = df.query('key not in @letters')
-        else:
-            df = df.query('key in @letters')
-        letter = df.iloc[0, 0]
-        self.game_config['character_in_focus'] = letter
-        if letter.isalpha() == False: 
-            self.game_config['punctuation_char'] = letter
-            word_list = word_list[:self.game_config['word_count']]
-
-        else: 
-            letter_count = {}
-            for word in word_list:
-                letter_count[word] = word.count(letter) #int(np.ceil(word.count(letter) + word.count(voyelle)/3)) #/3 is a weight so it does't count as much as a letter. In testing
-
-            freq = dict(sorted(letter_count.items(), key=lambda item: item[1], reverse=True))
-            freq = {k: v for k, v in freq.items() if v > 0}
-            word_list = [word for word, count in freq.items() for x in range(count)]
-            
-            total_weights = sum(freq.values())
-            probas = [weight/total_weights for weight in freq.values()]
-            word_list = np.random.choice(list(freq.keys()), self.game_config['word_count'], False, probas)
-
-        return list(word_list)
