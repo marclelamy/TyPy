@@ -40,7 +40,7 @@ class Sentence():
         # Remove banned words
         ngames_past_words = npast_games_words(self.con, self.game_config['n_games_banned_words'])
         print(f'ngames_past_words: {ngames_past_words}')
-        time.sleep(2)
+
 
 
         # Getting worst characters lower_case_letter
@@ -53,14 +53,15 @@ class Sentence():
 
 
         # Training mode
+        print(f'train: {self.game_config["train"]}')
         if self.game_config['train'] == True: 
             print('Training mode')
-            df_character_ranking = character_ranking(self.con)
+            df_character_ranking = character_ranking(self.con).sort_values('avg_time_diff', ascending=self.game_config['train_easy'])
             if self.game_config['train_letter_type'] == 'lower_case_letter':
                 df = pd.DataFrame(self.word_list, columns=['word'])
                 letter_in_focus = df_character_ranking.query(f'type == "{self.game_config["train_letter_type"]}"').iloc[0, 0]
                 print(f'letter_in_focus: {letter_in_focus}')
-                time.sleep(1)
+
                 self.game_config['character_in_focus'] = letter_in_focus
 
                 df_character_ranking = character_ranking(self.con)
@@ -68,15 +69,25 @@ class Sentence():
                 df['letter_count'] = df['word'].str.count(letter_in_focus)
                 df['total_potential_time'] = df['word'].apply(lambda x: sum([time_per_char[letter] for letter in list(x) if letter != letter_in_focus]))
                 df['total_potential_time_per_letter'] = df['total_potential_time'] / df['word'].str.len()
-                df = df.sort_values(by=['letter_count', 'total_potential_time_per_letter'], ascending=False).reset_index(drop=True)
+                df = df.sort_values(by=['letter_count', 'total_potential_time_per_letter'], ascending=self.game_config['train_easy']).reset_index(drop=True)
                 self.word_list = df['word'].tolist()
+                print(f'word_list: {self.word_list}')
+
 
         # Capitalizing and adding punctuation
         # This comes at the end because it need the full list of words after filtering 
         self.word_list = self.word_list[:self.game_config['word_count']]
+        print(f'word_list: {self.word_list}')
+
         self.word_list = self.capitalize_word_list(self.game_config['capitalized_words'], self.game_config['capitalized_letters'])
+        print(f'word_list: {self.word_list}')
+
         self.word_list = self.add_punctuation(self.game_config['punctuation'], self.game_config['punctuation_char'])
+        print(f'word_list: {self.word_list}')
+
         self.sentence = ' '.join(self.word_list)
+        print(f'sentence: {self.sentence}')
+
         return self.sentence
         
 

@@ -1,8 +1,8 @@
 import streamlit as st 
-from streamlit_autorefresh import st_autorefresh
+# from streamlit_autorefresh import st_autorefresh
 import pandas as pd
 # import sqlite3
-import main_backend as mb
+import backend as mb
 import datetime
 
 import plotly.io as pio
@@ -54,6 +54,9 @@ with metrics_col2:
 with metrics_col3:
     st.metric('Avg Accuracy', f'{avg_accuracy:.1%}')
 
+
+
+st.plotly_chart(mb.generate_game_over_game_chart())
 
 
 # Overtime wpm and accuracy 
