@@ -61,7 +61,7 @@ def load_query(con, query_name: str, text_only: bool = False) -> list:
 
 
 
-def character_ranking(con, max_key_count_to_use=None, min_key_count_to_use=None, condition=''): 
+def character_ranking(con, max_key_count_to_use=None, min_key_count_to_use=None, condition='', order='desc'): 
     '''Returns a dataframe with the ranking of the characters
     based on the time it takes to type them.
     '''
@@ -94,6 +94,7 @@ def character_ranking(con, max_key_count_to_use=None, min_key_count_to_use=None,
     select 
         key 
         , avg(time_diff) avg_time_diff
+        , round(avg(time_diff) - lag(avg(time_diff)) over(order by avg(time_diff)), 4) diff
         , count(*) count
         , c.type
 
@@ -104,8 +105,10 @@ def character_ranking(con, max_key_count_to_use=None, min_key_count_to_use=None,
         and letter_descending_rank >= {min_key_count_to_use}
         {condition}
             
-    group by key 
-    order by avg_time_diff desc
+    group by key
+    order by avg_time_diff {order}
     '''
 
-    return pd.read_sql_query(query, con)
+    df  = pd.read_sql_query(query, con)
+    df['time_diff'] = df['diff'].expanding().sum()
+    return df 
