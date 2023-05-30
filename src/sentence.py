@@ -1,39 +1,49 @@
 import pandas as pd
 import numpy as np
 import os
+import nltk
 import time 
 from src.query import npast_games_words, character_ranking
-
+import re
 
 class Sentence(): 
     def __init__(self, game_config, first_game, con): 
-        # self.game_config = game_config
         self.cwd = os.getcwd()
         self.game_config = game_config
         self.first_game = first_game
         self.con = con
-        # self.word_list = self.load_words(self.game_config['difficulty'])
-        # if self.game_config['train'] == False: 
-        #     self.word_list = self.word_list[:self.game_config['word_count']]
-        # else: 
-        #     # self.word_list = self.get_n_slowest_words(self.word_list)
-        #     self.word_list = self.only_one_letter(self.word_list)
 
+    def get_random_word(self):
+        # Load a local dictionary file
+        nltk.download('words')
+        words = nltk.corpus.words.words()
+        
+        # Get a random word
+        random_word = np.random.choice(words)
+        return random_word
 
-        # # print(f'word_list: {self.word_list}')
-        # self.capitalize_word_list(self.game_config['capitalized_words'], self.game_config['capitalized_letters'])
-        # # print(f'cap: {self.word_list}')
-        # self.add_punctuation(self.game_config['punctuation'], self.game_config['punctuation_char'])
-        # # print(f'punc: {self.word_list}')
-        # self.sentence = ' '.join(self.word_list)
-        # # self.sentence = '''--=qwertyuiop[]asdfghjkl;'zxcvbnm,./"'''
-        # # print(f'sentence: {self.sentence}')
-
-
+    def get_word_definitions(self, word):
+        # Use nltk to look up word definitions
+        definitions = nltk.corpus.wordnet.synsets(word)
+        if definitions:
+            # Retrieve the definitions if available
+            definitions = [definition.definition() for definition in definitions]
+            return '. '.join(definitions)
+        else:
+            return None
 
     def generate_sentence(self): 
         '''Creates a sentence based on the game_config
         '''
+        if self.game_config['random_definition'] == True:
+            while True: 
+                word = self.get_random_word()
+                definitions = self.get_word_definitions(word)
+                if definitions:
+                    sentence = word + ': ' + definitions + ' - ' + word
+                    break
+            self.sentence = '. '.join(map(lambda s: s.strip().capitalize(), sentence.split('.')))
+            return self.sentence
 
         self.word_list = self.load_words(self.game_config['difficulty'])
         
@@ -56,7 +66,9 @@ class Sentence():
         print(f'train: {self.game_config["train"]}')
         if self.game_config['train'] == True: 
             print('Training mode')
-            df_character_ranking = character_ranking(self.con).sort_values('avg_time_diff', ascending=self.game_config['train_easy'])
+            df_character_ranking = character_ranking(self.con, 
+                                                     max_key_count_to_use=self.game_config['max_key_count_to_use'],
+                                                     min_key_count_to_use=self.game_config['min_key_count_to_use']).sort_values('avg_time_diff', ascending=self.game_config['train_easy'])
             if self.game_config['train_letter_type'] == 'lower_case_letter':
                 df = pd.DataFrame(self.word_list, columns=['word'])
                 letter_in_focus = df_character_ranking.query(f'type == "{self.game_config["train_letter_type"]}"').iloc[0, 0]
@@ -67,11 +79,13 @@ class Sentence():
                 df_character_ranking = character_ranking(self.con)
                 time_per_char = dict(df_character_ranking[['key', 'avg_time_diff']].values)
                 df['letter_count'] = df['word'].str.count(letter_in_focus)
+                # df['letter_count'] = 0
                 df['total_potential_time'] = df['word'].apply(lambda x: sum([time_per_char[letter] for letter in list(x) if letter != letter_in_focus]))
                 df['total_potential_time_per_letter'] = df['total_potential_time'] / df['word'].str.len()
                 df = df.sort_values(by=['letter_count', 'total_potential_time_per_letter'], ascending=self.game_config['train_easy']).reset_index(drop=True)
                 self.word_list = df['word'].tolist()
-                print(f'word_list: {self.word_list}')
+                print(df.head(50))
+                # print(f'word_list: {self.word_list}')
 
 
         # Capitalizing and adding punctuation
@@ -85,9 +99,11 @@ class Sentence():
         self.word_list = self.add_punctuation(self.game_config['punctuation'], self.game_config['punctuation_char'])
         print(f'word_list: {self.word_list}')
 
+        np.random.shuffle(self.word_list)
         self.sentence = ' '.join(self.word_list)
+        # self.sentence = 'pizzazz zyzzyvas pizazzes razzmatazz zizzling benzalphenylhydrazone zyzzyva bezazzes hydroxyazobenzene bezazz benzeneazobenzene zizzled zizzles zizzle zigzagways buzzwords zigzaggedness benzdioxdiazine puzzleheadedness piezocrystallization pizazz zyzzogeton pizzazzes zigzaggedly zizz'
         print(f'sentence: {self.sentence}')
-
+        # time.sleep(100)
         return self.sentence
         
 
@@ -108,6 +124,24 @@ class Sentence():
             file_paths += [f'{self.cwd}/data/text/common_words.txt']
         if 'medium' in difficulty.lower():
             file_paths += [f'{self.cwd}/data/text/google_most_used_words.txt']
+        if 'w1000' in difficulty.lower():
+            file_paths += [f'{self.cwd}/data/text/wikipedia_1000.txt']
+        if 'w2000' in difficulty.lower():
+            file_paths += [f'{self.cwd}/data/text/wikipedia_2000.txt']
+        if 'w5000' in difficulty.lower():
+            file_paths += [f'{self.cwd}/data/text/wikipedia_5000.txt']
+        if 'w10000' in difficulty.lower():
+            file_paths += [f'{self.cwd}/data/text/wikipedia_10000.txt']
+        if 'w20000' in difficulty.lower():
+            file_paths += [f'{self.cwd}/data/text/wikipedia_20000.txt']
+        if 'w50000' in difficulty.lower():
+            file_paths += [f'{self.cwd}/data/text/wikipedia_50000.txt']
+        if 'w100000' in difficulty.lower():
+            file_paths += [f'{self.cwd}/data/text/wikipedia_100000.txt']
+        if 'w200000' in difficulty.lower():
+            file_paths += [f'{self.cwd}/data/text/wikipedia_200000.txt']
+        if 'w500000' in difficulty.lower():
+            file_paths += [f'{self.cwd}/data/text/wikipedia_500000.txt']
         
         word_list = []
         for file_path in file_paths:
