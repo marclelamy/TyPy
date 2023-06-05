@@ -69,29 +69,33 @@ class Sentence():
                                                      max_key_count_to_use=self.game_config['max_key_count_to_use'],
                                                      min_key_count_to_use=self.game_config['min_key_count_to_use'])
             df_character_ranking = df_character_ranking.sort_values('avg_time_diff', ascending=self.game_config['train_easy'])
+            df_character_ranking = df_character_ranking.query(f'type == "{self.game_config["train_letter_type"]}"')
+            print(tabulate(df_character_ranking))
             
-            if self.game_config['train_letter_type'] == 'lower_case_letter':
-                # Set Character in focus 
-                character_in_focus = df_character_ranking.query(f'type == "{self.game_config["train_letter_type"]}"').iloc[0:self.game_config['train_n_letters'], 0]
-                character_in_focus = ''.join(character_in_focus)
-                self.game_config['character_in_focus'] = character_in_focus
+            # Set Character in focus 
+            character_in_focus = df_character_ranking.query(f'type == "{self.game_config["train_letter_type"]}"').iloc[0:self.game_config['train_n_letters'], 0]
+            character_in_focus = ''.join(character_in_focus)
+            self.game_config['character_in_focus'] = character_in_focus
 
-                df_character_ranking = character_ranking(self.con)
-                time_per_char = dict(df_character_ranking[['key', 'avg_time_diff']].values)
+            # Calculate the weight of each char and the letter_count / letter_score
+            time_per_char = {key: len(character_in_focus) - rank for rank, key in enumerate(character_in_focus)}
+            print(time_per_char)
+            character_in_focus_weights = {char: time_per_char[char] / sum(time_per_char.values()) for char in character_in_focus}
+            print(character_in_focus_weights)
+            df = pd.DataFrame(self.word_list, columns=['word'])
+            df['letter_score'] = df['word'].apply(lambda word: sum([word.count(char) * character_in_focus_weights[char] for char in character_in_focus]))
 
-                df = pd.DataFrame(self.word_list, columns=['word'])
-                df['letter_count'] = df['word'].apply(lambda word: sum([word.count(char) for char in character_in_focus]))
 
-
-                if self.game_config['train_rank_non_character_in_focus']: 
-                    df['total_potential_time'] = df['word'].apply(lambda x: sum([time_per_char[letter] for letter in list(x) if letter not in character_in_focus]))
-                    df['total_potential_time_per_letter'] = df['total_potential_time'] / df['word'].str.len()
-                    df = df.sort_values(by=['letter_count', 'total_potential_time_per_letter'], ascending=self.game_config['train_easy']).reset_index(drop=True)
-                else:
-                    df = df.sort_values(by=['letter_count'], ascending=self.game_config['train_easy']).reset_index(drop=True)
-                # print(tabulate(df.head(50)))
-                # time.sleep(100)
-                self.word_list = df['word'].tolist()
+            if self.game_config['train_rank_non_character_in_focus']: 
+                df['total_potential_time'] = df['word'].apply(lambda x: sum([time_per_char[letter] for letter in list(x) if letter not in character_in_focus]))
+                df['total_potential_time_per_letter'] = df['total_potential_time'] / df['word'].str.len()
+                df = df.sort_values(by=['letter_score', 'total_potential_time_per_letter'], ascending=self.game_config['train_easy']).reset_index(drop=True)
+            else:
+                df = df.sort_values(by=['letter_score'], ascending=self.game_config['train_easy']).reset_index(drop=True)
+            
+            print(tabulate(df.head(50)))
+            time.sleep(100)
+            self.word_list = df['word'].tolist()
 
         elif self.game_config['mode'] == 'campaign': 
             letter = pd.read_sql_query('select * from campaing_letters where validated = False limit 1', self.con)['letter'].values[0]
