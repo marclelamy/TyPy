@@ -4,6 +4,7 @@ import os
 import nltk
 import time 
 from src.query import npast_games_words, character_ranking
+from tabulate import tabulate
 import re
 
 class Sentence(): 
@@ -63,31 +64,56 @@ class Sentence():
 
 
         # Training mode
-        print(f'train: {self.game_config["train"]}')
         if self.game_config['train'] == True: 
-            print('Training mode')
             df_character_ranking = character_ranking(self.con, 
                                                      max_key_count_to_use=self.game_config['max_key_count_to_use'],
-                                                     min_key_count_to_use=self.game_config['min_key_count_to_use']).sort_values('avg_time_diff', ascending=self.game_config['train_easy'])
+                                                     min_key_count_to_use=self.game_config['min_key_count_to_use'])
+            df_character_ranking = df_character_ranking.sort_values('avg_time_diff', ascending=self.game_config['train_easy'])
+            
             if self.game_config['train_letter_type'] == 'lower_case_letter':
-                df = pd.DataFrame(self.word_list, columns=['word'])
-                letter_in_focus = df_character_ranking.query(f'type == "{self.game_config["train_letter_type"]}"').iloc[0, 0]
-                print(f'letter_in_focus: {letter_in_focus}')
-
-                self.game_config['character_in_focus'] = letter_in_focus
+                # Set Character in focus 
+                character_in_focus = df_character_ranking.query(f'type == "{self.game_config["train_letter_type"]}"').iloc[0:self.game_config['train_n_letters'], 0]
+                character_in_focus = ''.join(character_in_focus)
+                self.game_config['character_in_focus'] = character_in_focus
 
                 df_character_ranking = character_ranking(self.con)
                 time_per_char = dict(df_character_ranking[['key', 'avg_time_diff']].values)
-                df['letter_count'] = df['word'].str.count(letter_in_focus)
-                # df['letter_count'] = 0
-                df['total_potential_time'] = df['word'].apply(lambda x: sum([time_per_char[letter] for letter in list(x) if letter != letter_in_focus]))
-                df['total_potential_time_per_letter'] = df['total_potential_time'] / df['word'].str.len()
-                df = df.sort_values(by=['letter_count', 'total_potential_time_per_letter'], ascending=self.game_config['train_easy']).reset_index(drop=True)
+
+                df = pd.DataFrame(self.word_list, columns=['word'])
+                df['letter_count'] = df['word'].apply(lambda word: sum([word.count(char) for char in character_in_focus]))
+
+
+                if self.game_config['train_rank_non_character_in_focus']: 
+                    df['total_potential_time'] = df['word'].apply(lambda x: sum([time_per_char[letter] for letter in list(x) if letter not in character_in_focus]))
+                    df['total_potential_time_per_letter'] = df['total_potential_time'] / df['word'].str.len()
+                    df = df.sort_values(by=['letter_count', 'total_potential_time_per_letter'], ascending=self.game_config['train_easy']).reset_index(drop=True)
+                else:
+                    df = df.sort_values(by=['letter_count'], ascending=self.game_config['train_easy']).reset_index(drop=True)
+                # print(tabulate(df.head(50)))
+                # time.sleep(100)
                 self.word_list = df['word'].tolist()
-                print(df.head(50))
-                # print(f'word_list: {self.word_list}')
 
+        elif self.game_config['mode'] == 'campaign': 
+            letter = pd.read_sql_query('select * from campaing_letters where validated = False limit 1', self.con)['letter'].values[0]
+            self.game_config['character_in_focus'] = letter
 
+            # df_character_ranking = character_ranking(self.con,
+            #                                             max_key_count_to_use=None,
+            #                                             min_key_count_to_use=None,
+            #                                             condition1='',
+            #                                             condition2='',
+            #                                             order='desc')
+            # time_per_char = dict(df_character_ranking[['key', 'avg_time_diff']].values)
+            # # Get the keys and probabilities as separate lists
+            # total_value = sum(time_per_char.values())
+            # probabilities = {key: value / total_value for key, value in time_per_char.items()}
+            # #random pick and remove words
+            # random_pick = np.random.choice(list(probabilities.keys()), p=list(probabilities.values()))        
+            # print(self.word_list)
+            self.word_list = [word for word in self.word_list if len(word) > 4 and letter in word]
+
+        if 'character_in_focus' not in self.game_config.keys(): 
+            self.game_config['character_in_focus'] = None
         # Capitalizing and adding punctuation
         # This comes at the end because it need the full list of words after filtering 
         self.word_list = self.word_list[:self.game_config['word_count']]
@@ -106,7 +132,6 @@ class Sentence():
         # time.sleep(100)
         return self.sentence
         
-
 
 
 
@@ -142,6 +167,8 @@ class Sentence():
             file_paths += [f'{self.cwd}/data/text/wikipedia_200000.txt']
         if 'w500000' in difficulty.lower():
             file_paths += [f'{self.cwd}/data/text/wikipedia_500000.txt']
+        if difficulty.lower() in 'nltk_corpus_words_250k': 
+            file_paths += [f'{self.cwd}/data/text/nltk_corpus_words_250k.txt']
         
         word_list = []
         for file_path in file_paths:
