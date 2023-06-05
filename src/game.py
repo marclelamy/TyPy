@@ -22,10 +22,6 @@ cwd = os.getcwd()
 # except: pass
 
 
-def update_terminal(): 
-    os.system('cls' if os.name == 'nt' else 'clear')
-
-
 class Game(): 
     def __init__(self): 
         self.game_id = np.random.randint(10**10)
@@ -39,18 +35,10 @@ class Game():
         '''Create the two tables of the database
         '''
 
-        # if os.path.exists('data/main_database.db'):
-        #     self.con = sqlite3.connect('data/main_database.db')
-        #     if pd.read_sql_query('select * from keys_pressed', self.con).empty: 
-        #         self.first_game = True
-        #     else: 
-        #         self.first_game = False
-        # else:
-        #     self.first_game = True
         if os.path.exists(f'{cwd}/data') == False:
             os.mkdir(f'{cwd}/data')
         self.con = sqlite3.connect(f'{cwd}/data/main_database.sqlite')
-        self.con.execute('drop table characters')
+        self.con.execute('drop table if exists characters')
         keys_pressed = '''
         CREATE TABLE IF NOT EXISTS keys_pressed (
         key TEXT,
@@ -76,8 +64,16 @@ class Game():
         type TEXT
         );
         '''
+        campaing_letters = '''
+        CREATE TABLE IF NOT EXISTS campaing_letters (
+        letter TEXT,
+        validated INTEGER,
+        rank INTEGER
+        );
+        '''
 
-        for query in [keys_pressed, games_settings, characters, clean_games_settings]: 
+
+        for query in [keys_pressed, games_settings, characters, clean_games_settings, campaing_letters]: 
             self.con.execute(query)
 
         if pd.read_sql_query('select * from characters', self.con).shape[0] == 0:
@@ -90,6 +86,11 @@ class Game():
             characters_list = [[char, key] for key, value in characters_dict.items() for char in value]
             pd.DataFrame(characters_list, columns=['character', 'type']).to_sql('characters', self.con, if_exists='replace', index=False)
 
+        if pd.read_sql_query('select * from campaing_letters', self.con).shape[0] == 0:
+            df_campaing_letters = pd.DataFrame(list('jfkdlsahgieurytowpqnvmbcxz'), columns=['letter'])
+            df_campaing_letters['validated'] = False
+            df_campaing_letters['rank'] = df_campaing_letters.index + 1
+            df_campaing_letters.to_sql('campaing_letters', self.con, if_exists='replace', index=False)
 
         if pd.read_sql_query('select * from keys_pressed', self.con).shape[0] == 0: 
             self.first_game = True
@@ -98,7 +99,7 @@ class Game():
 
 
     
-    def propose_menu(self, question: list, choices: dict, nwait_enter=False) -> int:
+    def propose_menu(self, question: list, choices: dict) -> int:
         '''Print a new menu with question/answers with key pressed
         
         parameters 
@@ -161,32 +162,51 @@ class Game():
         with open(f'configs/game_default.toml', 'r') as f:
             default_config = toml.load(f)        
         for key, value in default_config.items(): 
-            if key not in config.keys(): 
+            if isinstance(value, dict):
+                for sub_key, sub_value in value.items(): 
+                    if sub_key not in config[key].keys(): 
+                        config[key][sub_key] = sub_value
+            elif key not in config.keys(): 
                 config[key] = value 
-        # Check if the config is valid
 
+        config = self.format_config(config)
         return config
-
-
-    def confirm_game_settings_before_game(self): 
-        '''Sets the config for the game before launching it.
-        '''
-        print(tabulate(character_ranking(self.con, condition='and c.type = "lower_case_letter"').head(10)))
-        # Reads, sets and print default game config
+    
+    def format_config(self, config): 
+        if config['rules']['mode'] == 'campaign': 
+            config['rules']['word_count'] = 25
+            config['rules']['random_definition'] = False
+            config['rules']['word_length_min'] = 4
+            config['rules']['capitalized_words'] = 0
+            config['rules']['difficulty'] = 'nltk_corpus_words_250k'
+            config['rules']['n_games_banned_words'] = 2
+            config['rules']['train'] = False
+            config['rules']['punctuation'] = 0
+        
+        elif config['rules']['mode'] == 'campaign': 
+            config['rules']['train'] = True
+        
+        return config
+            
+    
+    def set_config(self):
         available_configs = [file.replace('.toml', '') for file in os.listdir(f'{cwd}/configs/')]
         if 'user_default' in available_configs:
             self.game_config = self.read_config('user_default')
         else:
             self.game_config = self.read_config('game_default')
 
-        # print(self.game_config, self.game_preference)
 
-        # Print current game config 
+    def confirm_game_settings_before_game(self): 
+        '''Sets the config for the game before launching it.
+        '''
+        # Reads, sets and print default game config
+        self.set_config()
         print("\n\n\nCurrent game config: \n")
         for config_type, config in self.game_config.items():
             game_config_tabulate_basic = [[rule.capitalize().replace('_', ' '), value] for rule, value in config.items()]
             print(tabulate(game_config_tabulate_basic, headers=[config_type.capitalize(), 'Value'], showindex=True), '\n')
-
+        print(tabulate(character_ranking(self.con, condition2='and c.type = "lower_case_letter"', order='asc', max_key_count_to_use=self.game_config['rules']['max_key_count_to_use'], min_key_count_to_use=self.game_config['rules']['min_key_count_to_use']).head(100)))
         # Get window size
         self.window_width, self.window_height = shutil.get_terminal_size()
 
@@ -261,7 +281,10 @@ class Game():
 
 
     def leaderboard(self):
+        print(tabulate(pd.read_sql_query('select * from games_summary', self.con)))
+        time.sleep(10)
         print('Leaderboard')
+        self.start_game()
 
 
     def check_game_config(self): 
@@ -288,15 +311,12 @@ class Game():
 
         
     def hud(self, sentence_to_display, correct_key_count, keys_pressed): 
-        '''What to print during the game
+        '''Information to print during the game
         '''
 
-
         infos_to_print = ''
-        # infos_to_print = '\n' * self.window_height
         wpm = 0
-        if len(keys_pressed) > 1:
-            # print(keys_pressed[-1][3],  keys_pressed[0][3])
+        if len(keys_pressed) > 1: 
             wpm = self.wpm(correct_key_count, keys_pressed[-1][3] - keys_pressed[0][3])
             self.wpm_list.append(wpm)
             wpm_formatted = self.color_formatting(round(wpm, 1), self.best_wpm)
@@ -313,28 +333,41 @@ class Game():
         else: 
             self.wpm_list = []
 
+
+
+        # Adding more infos to the HUD
+        if self.game_config['display']['display_character_in_focus'] == True:
+            character_in_focus = self.game_config['rules']['character_in_focus']
+            infos_to_print += f'Character in focus: {character_in_focus}\n'
+
         if self.game_config['display']['display_words_left'] == True:
             words_left = sentence_to_display.count(' ')
             infos_to_print += f'{words_left + 1} words left to type\n'
 
+
         infos_to_print += ' ' + ' '.join(sentence_to_display.split(' '))[:self.window_width - 1]
-        # infos_to_print += ' ' + ' '.join(sentence_to_display.split(' '))
         infos_to_print += ' ' * (self.window_width - len(infos_to_print)-10) 
-        # print(infos_to_print, '\t'*5, end='\r')
-        # print(repr(infos_to_print), '\n'*5)
 
 
-        update_terminal()
-        # step = len([dt for dt in keys_pressed]) // 30
-        # data = [keys_pressed[i] for i in range(0, len(keys_pressed), step)]
+        # Clear the terminal of any text and print the new information
+        os.system('cls' if os.name == 'nt' else 'clear')
         print(infos_to_print)
-        # self.print_multine_with_carriage(infos_to_print) # This adds a new line at the end
-        # sys.stdout.write(infos_to_print)
         
+
+
+
+
+
+
+
 
 
     def start_game(self): 
         print('Play game', '\n' * self.window_height)
+
+        # Reads, sets and print default game config
+        self.set_config()
+
 
         self.score = Score( 
             self.game_config['rules'],
@@ -342,6 +375,7 @@ class Game():
 
         # Check if first game with those game particular settings
         try: 
+
             game_count = query_table(self.con, 'games_summary', self.score.general_condition).shape[0]
             if game_count == 0: 
                 self.first_game = True
@@ -366,11 +400,13 @@ class Game():
             self.first_game,
             self.con,
             )
-        if game_count == 0:
+        if pd.read_sql_query('select count(*) from clean_games_settings', self.con).iloc[0, 0] == 0:
             self.sentence.sentence = 'the quick brown fox jumps over the lazy dog'
         else: 
             self.sentence.generate_sentence()
-
+        self.game_config['rules']['character_in_focus'] = self.sentence.game_config['character_in_focus']
+        print(self.sentence.sentence)
+        time.sleep(1)
 
         #####################################
         #### Here really starts the game ####
@@ -406,9 +442,6 @@ class Game():
                     incorrect_key_count += 1
 
         
-        # End game
-        if 'character_in_focus' in self.sentence.game_config.keys():
-            self.game_config['rules']['character_in_focus'] = self.sentence.game_config['character_in_focus']
         # self.game_config['rules'] = self.sentence.game_config['rules'] # If the the punctuation char is replaced in the case of training mode
         self.end_game(
             self.sentence.sentence, 
@@ -431,9 +464,13 @@ class Game():
              'game_id': self.game_id}
         )
         self.score.log_game(game_data)
+
+        if self.game_config['rules']['mode'] == 'campaign': 
+            self.campaign_letter_pass()
          
         # Propose to save on gbg, back to main menu, leaderboard
-        print(tabulate(character_ranking(self.con, condition='and c.type = "lower_case_letter"').head(10)))
+        print(tabulate(character_ranking(self.con, condition2='and c.type = "lower_case_letter"', order='asc', max_key_count_to_use=self.game_config['rules']['max_key_count_to_use'], min_key_count_to_use=self.game_config['rules']['min_key_count_to_use']).head(100)))
+        print(self.game_id)
 
         self.score.summarize_games_scores()
         print(self.first_game)
@@ -444,13 +481,30 @@ class Game():
             print('Game summary:')
             print(tabulate(df_game_summary.T))
 
+        self.propose_new_game()
 
+
+    def campaign_letter_pass(self): 
+        game_ids = query_table(self.con, 'clean_games_settings', 'and mode = "campaign"')['game_id'].astype(str)
+        df = character_ranking(self.con, condition1=f'and game_id in ({", ".join(game_ids)})')
+        df['gt'] = df['avg_time_diff'].quantile(.3)
+        # print(tabulate(df))
+
+
+        if df.loc[df['key'] == self.game_config['rules']['character_in_focus'], 'avg_time_diff'].values[0] > df['avg_time_diff'].quantile(.3): 
+            df_campaing_letters = query_table(self.con, 'campaing_letters')
+            df_campaing_letters.loc[df_campaing_letters['letter'] == self.game_config['rules']['character_in_focus'], 'validated'] = 1
+            df_campaing_letters.to_sql('campaing_letters', self.con, if_exists='append', index=False)
+
+
+    def propose_new_game(self):
         # What to do after the game    
         print('\n' * 1)
         choice = self.propose_menu(question = 'What do you want to do?',
-                                   choices = {'P': 'Play again', 
-                                              'M': 'Main menu', 
-                                              'C': f'Change settings'})
+                                    choices = {'P': 'Play again', 
+                                                'M': 'Main menu', 
+                                                'C': f'Change settings',
+                                                'S': f'Show stats'})
 
         self.game_id = np.random.randint(10**10)
         self.first_game = False
@@ -460,8 +514,12 @@ class Game():
             self.main_menu()
         elif choice == 2: 
             self.confirm_game_settings_before_game()
+        elif choice == 3: 
+            self.show_dashboard()
 
-
+    def show_dashboard(self):
+        os.system("streamlit run streamlit/frontend.py")
+        self.propose_new_game()
 
     def color_formatting(self, val_to_print, val_to_compare, higher_better=True) -> str: 
         '''
@@ -486,13 +544,6 @@ class Game():
             return colored(val_to_print, 'yellow')
         else: 
             return colored(val_to_print, 'green')
-
-
-    # def query(self, query): 
-    #     return pd.read_sql_query(query', self.con)
-
-
-
 
 
     ################
@@ -630,7 +681,7 @@ class Game():
         # tabular_data = list(map(list, zip(*tabular_data)))
 
         # display(df_described)
-        print(tabulate(tabular_data, headers=[f'Total games: {total_games}'] + comparisons))
+        print(tabulate(tabular_data, headers=[f'\nTotal games: {total_games}'] + comparisons))
         # # tabular_data
 
 
