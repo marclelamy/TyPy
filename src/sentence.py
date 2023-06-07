@@ -73,9 +73,12 @@ class Sentence():
             print(tabulate(df_character_ranking))
             
             # Set Character in focus 
-            character_in_focus = df_character_ranking.query(f'type == "{self.game_config["train_letter_type"]}"').iloc[0:self.game_config['train_n_letters'], 0]
-            character_in_focus = ''.join(character_in_focus)
-            self.game_config['character_in_focus'] = character_in_focus
+            if self.game_config['train_character_in_focus'] != '':
+                character_in_focus = self.game_config['train_character_in_focus']
+            else:
+                df_character_ranking.query(f'type == "{self.game_config["train_letter_type"]}"').iloc[0:self.game_config['train_n_letters'], 0]
+                character_in_focus = ''.join(character_in_focus)
+                self.game_config['character_in_focus'] = character_in_focus
 
             # Calculate the weight of each char and the letter_count / letter_score
             time_per_char = {key: len(character_in_focus) - rank for rank, key in enumerate(character_in_focus)}
@@ -94,7 +97,7 @@ class Sentence():
                 df = df.sort_values(by=['letter_score'], ascending=self.game_config['train_easy']).reset_index(drop=True)
             
             print(tabulate(df.head(50)))
-            time.sleep(100)
+            # time.sleep(100)
             self.word_list = df['word'].tolist()
 
         elif self.game_config['mode'] == 'campaign': 
