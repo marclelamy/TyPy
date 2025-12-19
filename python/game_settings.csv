@@ -1,0 +1,2 @@
+,game_id,game_settings
+0,1179895951,"{'word_count': 2, 'word_length_min': 4, 'word_length_max': 1000, 'capitalized_words': 1, 'capitalized_letters': 0, 'punctuation': 0, 'punctuation_char': 0, 'force_shift': 0, 'difficulty': 'Medium', 'n_games_banned_words': 0, 'train': False, 'train_easy': True, 'player_name': 'NPC', 'display_chart': False, 'display_wpm': False, 'display_words_left': True, 'display_word_count': -1, 'sentence': 'suggesting driven'}"

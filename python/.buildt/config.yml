@@ -1,0 +1,23 @@
+name: TyPy
+id: 9bbbb215-b6ef-49d8-a3d0-c1bb263eefd9
+extensions:
+  - .py
+  - .cgi
+  - .fcgi
+  - .gyp
+  - .gypi
+  - .lmi
+  - .py3
+  - .pyde
+  - .pyi
+  - .pyp
+  - .pyt
+  - .pyw
+  - .rpy
+  - .smk
+  - .spec
+  - .tac
+  - .wsgi
+  - .xpy
+languages:
+  - Python
